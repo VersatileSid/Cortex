@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://labelguard:labelguard@localhost:5432/labelguard"
     upload_dir: Path = Path("uploads")
     max_upload_bytes: int = 10 * 1024 * 1024
+    ocr_language: str = "en"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
