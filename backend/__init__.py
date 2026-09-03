@@ -1,0 +1,1 @@
+"""LabelGuard backend package."""
