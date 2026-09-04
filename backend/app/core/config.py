@@ -4,6 +4,14 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# These are the India-relevant language identifiers documented for the
+# PP-OCRv3 models used by PaddleOCR 3.x.  They are deliberately separate from
+# the UI locale list: a UI locale must never imply OCR support.
+SUPPORTED_PADDLE_OCR_LANGUAGES = frozenset({
+    "en", "hi", "gom", "mai", "mr", "ne", "sa", "ta", "te", "ur", "ka",
+})
+
+
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
 
@@ -12,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://labelguard:labelguard@localhost:5432/labelguard"
     upload_dir: Path = Path("uploads")
     max_upload_bytes: int = 10 * 1024 * 1024
-    ocr_languages: str = "en,hi"
+    ocr_languages: str = "en,hi,gom,mai,mr,ne,sa,ta,te,ur,ka"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -28,4 +36,11 @@ def get_ocr_languages(settings: Settings | None = None) -> tuple[str, ...]:
     languages = tuple(dict.fromkeys(code.strip().lower() for code in configured.split(",") if code.strip()))
     if not languages:
         raise ValueError("OCR_LANGUAGES must include at least one PaddleOCR language code.")
+    unsupported = sorted(set(languages) - SUPPORTED_PADDLE_OCR_LANGUAGES)
+    if unsupported:
+        raise ValueError(
+            "OCR_LANGUAGES includes unsupported PaddleOCR 3.x language code(s): "
+            f"{', '.join(unsupported)}. Supported codes: "
+            f"{', '.join(sorted(SUPPORTED_PADDLE_OCR_LANGUAGES))}."
+        )
     return languages

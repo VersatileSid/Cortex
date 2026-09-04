@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { useI18n } from "./i18n";
+import { UI_LANGUAGES, useI18n } from "./i18n";
 
 type Inspection = { id: string; inspection_number: string };
 type UploadedImage = { id: string; original_filename: string };
@@ -9,7 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api";
 
 function LanguageSelector() {
   const { locale, setLocale, t } = useI18n();
-  return <label className="language-selector"><span>{t("language")}</span><select aria-label={t("language")} value={locale} onChange={(event) => setLocale(event.target.value as "en" | "hi")}><option value="en">{t("english")}</option><option value="hi">{t("hindi")}</option></select></label>;
+  return <label className="language-selector"><span>{t("language")}</span><select aria-label={t("language")} value={locale} onChange={(event) => setLocale(event.target.value as typeof locale)}>{UI_LANGUAGES.map(({ code, nativeName, englishName }) => <option key={code} value={code}>{nativeName} — {englishName}</option>)}</select></label>;
 }
 
 export default function App() {

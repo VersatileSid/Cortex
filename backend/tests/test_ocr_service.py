@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.api.inspections import get_ocr_service
 from backend.app.core.config import Settings, get_ocr_languages, get_settings
+import pytest
 from backend.app.core.database import get_db
 from backend.app.main import app
 from backend.app.models import Base, OcrResult
@@ -44,6 +45,17 @@ def test_v3_prediction_parser_preserves_text_score_and_box() -> None:
 
 def test_english_and_hindi_are_default_configured_languages() -> None:
     assert get_ocr_languages(Settings(ocr_languages="en,hi")) == ("en", "hi")
+
+
+def test_multiple_documented_indian_ocr_languages_are_accepted() -> None:
+    assert get_ocr_languages(Settings(ocr_languages="en,hi,mr,ta,te,ur,ka")) == (
+        "en", "hi", "mr", "ta", "te", "ur", "ka",
+    )
+
+
+def test_unsupported_ocr_language_configuration_fails_clearly() -> None:
+    with pytest.raises(ValueError, match="unsupported PaddleOCR 3.x language code"):
+        get_ocr_languages(Settings(ocr_languages="en,bn"))
 
 
 def test_duplicate_multilingual_detections_keep_best_confidence() -> None:
