@@ -29,6 +29,7 @@ class OcrDetection:
 @dataclass(frozen=True)
 class OcrDocument:
     engine: str
+    languages: list[str]
     detections: list[OcrDetection]
 
     @property
@@ -44,20 +45,23 @@ class PaddleOcrService:
 
     engine_name = "PaddleOCR"
 
-    def __init__(self, language: str = "en", engine: Any | None = None) -> None:
-        self.language = language
+    def __init__(self, languages: tuple[str, ...] = ("en", "hi"), engine: Any | None = None) -> None:
+        self.languages = languages
         self._engine = engine
+        self._engines: dict[str, Any] = {}
 
-    def _get_engine(self) -> Any:
+    def _get_engine(self, language: str) -> Any:
         if self._engine is not None:
             return self._engine
+        if language in self._engines:
+            return self._engines[language]
         try:
             from paddleocr import PaddleOCR
 
             # PaddleOCR 3 uses the unified predict interface. The options keep
             # this initial package-label workflow focused on text recognition.
-            self._engine = PaddleOCR(
-                lang=self.language,
+            self._engines[language] = PaddleOCR(
+                lang=language,
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
@@ -66,15 +70,20 @@ class PaddleOcrService:
             raise OcrInitializationError("PaddleOCR is not installed on this server.") from error
         except Exception as error:
             raise OcrInitializationError("PaddleOCR could not be initialized.") from error
-        return self._engine
+        return self._engines[language]
 
     def scan(self, image_path: Path) -> OcrDocument:
         processed_path: Path | None = None
         try:
             processed_path = self._preprocess(image_path)
-            engine = self._get_engine()
-            detections = self._run_engine(engine, processed_path)
-            return OcrDocument(engine=self.engine_name, detections=detections)
+            detections = []
+            for language in self.languages:
+                detections.extend(self._run_engine(self._get_engine(language), processed_path))
+            return OcrDocument(
+                engine=self.engine_name,
+                languages=list(self.languages),
+                detections=self._deduplicate(detections),
+            )
         except OcrInitializationError:
             raise
         except Exception as error:
@@ -150,3 +159,15 @@ class PaddleOcrService:
         if value is None:
             return None
         return [[float(coordinate) for coordinate in point] for point in value]
+
+    @staticmethod
+    def _deduplicate(detections: list[OcrDetection]) -> list[OcrDetection]:
+        """Keep the highest-confidence copy of an identical multi-pass detection."""
+        unique: dict[tuple[str, tuple[tuple[float, ...], ...] | None], OcrDetection] = {}
+        for detection in detections:
+            box_key = tuple(tuple(round(value, 2) for value in point) for point in detection.bbox) if detection.bbox else None
+            key = (detection.text.strip(), box_key)
+            previous = unique.get(key)
+            if previous is None or (detection.confidence or 0) > (previous.confidence or 0):
+                unique[key] = detection
+        return list(unique.values())

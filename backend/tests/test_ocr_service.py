@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.api.inspections import get_ocr_service
-from backend.app.core.config import get_settings
+from backend.app.core.config import Settings, get_ocr_languages, get_settings
 from backend.app.core.database import get_db
 from backend.app.main import app
 from backend.app.models import Base, OcrResult
@@ -26,7 +26,7 @@ class LegacyEngine:
 
 def test_ocr_service_accepts_an_injected_engine() -> None:
     service = PaddleOcrService(engine=LegacyEngine())
-    document = service._run_engine(service._get_engine(), Path("package.png"))
+    document = service._run_engine(service._get_engine("en"), Path("package.png"))
 
     assert document[0].text == "MRP Rs 50"
     assert document[0].confidence == 0.96
@@ -42,6 +42,22 @@ def test_v3_prediction_parser_preserves_text_score_and_box() -> None:
     assert result[0].confidence == 0.91
 
 
+def test_english_and_hindi_are_default_configured_languages() -> None:
+    assert get_ocr_languages(Settings(ocr_languages="en,hi")) == ("en", "hi")
+
+
+def test_duplicate_multilingual_detections_keep_best_confidence() -> None:
+    duplicate_box = [[0.0, 0.0], [5.0, 0.0], [5.0, 2.0], [0.0, 2.0]]
+    detections = PaddleOcrService._deduplicate([
+        OcrDetection("MRP", 0.83, duplicate_box),
+        OcrDetection("MRP", 0.96, duplicate_box),
+        OcrDetection("मूल्य", 0.91, duplicate_box),
+    ])
+
+    assert len(detections) == 2
+    assert next(item for item in detections if item.text == "MRP").confidence == 0.96
+
+
 def png_bytes() -> bytes:
     image = Image.new("RGB", (4, 4), color="white")
     buffer = BytesIO()
@@ -54,6 +70,7 @@ class FakeOcrService:
         assert image_path.is_file()
         return OcrDocument(
             engine="PaddleOCR",
+            languages=["en", "hi"],
             detections=[OcrDetection(text="MRP Rs 50", confidence=0.96, bbox=[[1, 2], [3, 2], [3, 4], [1, 4]])],
         )
 
@@ -82,6 +99,7 @@ def test_ocr_endpoint_stores_real_service_output(tmp_path, monkeypatch) -> None:
         response = client.post(f"/api/inspections/{inspection['id']}/images/{uploaded['id']}/ocr")
 
         assert response.status_code == 201
+        assert response.json()["languages"] == ["en", "hi"]
         assert response.json()["results"][0]["text"] == "MRP Rs 50"
         with sessions() as session:
             stored = session.scalar(select(OcrResult).where(OcrResult.id == UUID(response.json()["id"])))

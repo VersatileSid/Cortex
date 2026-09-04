@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import get_settings
+from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
 from backend.app.models import Inspection, InspectionImage, OcrResult
 from backend.app.schemas.inspection import ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
@@ -20,7 +20,7 @@ def make_inspection_number() -> str:
 
 def get_ocr_service() -> PaddleOcrService:
     """Dependency factory kept separate so tests and future providers can replace it."""
-    return PaddleOcrService(language=get_settings().ocr_language)
+    return PaddleOcrService(languages=get_ocr_languages())
 
 
 @router.post("", response_model=InspectionCreated, status_code=status.HTTP_201_CREATED)
@@ -98,7 +98,7 @@ def process_inspection_image_ocr(
         inspection_id=inspection.id,
         image_id=image.id,
         engine=document.engine,
-        languages=[settings.ocr_language],
+        languages=document.languages,
         raw_text=document.raw_text,
         detections=document.as_database_detections(),
     )
@@ -110,6 +110,7 @@ def process_inspection_image_ocr(
         inspection_id=ocr_result.inspection_id,
         image_id=ocr_result.image_id,
         engine=ocr_result.engine,
+        languages=ocr_result.languages,
         processed_at=ocr_result.created_at,
         raw_text=ocr_result.raw_text,
         results=ocr_result.detections,

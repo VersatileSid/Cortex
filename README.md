@@ -27,6 +27,8 @@ To create an inspection and upload an image, use the API docs at `http://localho
 
 PaddleOCR requires the `paddlepaddle`, `paddleocr`, and OpenCV packages declared in `pyproject.toml`. CPU inference is the default; consult PaddlePaddle's installation guidance if your platform needs a platform-specific wheel or GPU support.
 
+English and Hindi are enabled by default through `OCR_LANGUAGES=en,hi`. LabelGuard runs one recognizer per configured language against the same image and removes exact duplicate text-box results. Add later PaddleOCR language codes as a comma-separated value, for example `OCR_LANGUAGES=en,hi,mr`; no code changes are required.
+
 After applying migrations and uploading an image, run OCR with:
 
 ```powershell
@@ -39,6 +41,7 @@ The response contains only OCR data, for example:
 ```json
 {
   "engine": "PaddleOCR",
+  "languages": ["en", "hi"],
   "raw_text": "MRP Rs 50",
   "results": [{"text": "MRP Rs 50", "confidence": 0.96, "bbox": [[10, 20], [110, 20], [110, 45], [10, 45]]}]
 }
@@ -79,6 +82,22 @@ frontend/      React/Vite application
 database/      Database-related project files (migrations are under backend/alembic)
 docker-compose.yml
 ```
+
+## Website languages
+
+The React interface supports English (default) and Hindi. The header language selector changes supported interface text without a page reload and stores the selection in browser `localStorage` under `labelguard-language`; refreshes retain the chosen language. OCR text is never translated because it is evidence returned by the API.
+
+Translations live in `frontend/src/locales/en.json` and `frontend/src/locales/hi.json`. To add a language, add a locale JSON file with the same keys, register its code in `frontend/src/i18n.tsx`, and add it to the selector. Hindi and English use left-to-right layout.
+
+Run the frontend locally:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Run its tests with `npm test`.
 
 ## Environment
 
