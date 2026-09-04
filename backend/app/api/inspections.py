@@ -2,12 +2,14 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
-from backend.app.models import Inspection, InspectionImage, OcrResult
-from backend.app.schemas.inspection import ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
+from backend.app.models import ExtractedField, Inspection, InspectionImage, OcrResult
+from backend.app.schemas.inspection import ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
+from backend.app.services.extraction import ExtractionService
 from backend.app.services.ocr import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, store_image, validate_image
 
@@ -21,6 +23,10 @@ def make_inspection_number() -> str:
 def get_ocr_service() -> PaddleOcrService:
     """Dependency factory kept separate so tests and future providers can replace it."""
     return PaddleOcrService(languages=get_ocr_languages())
+
+
+def get_extraction_service() -> ExtractionService:
+    return ExtractionService()
 
 
 @router.post("", response_model=InspectionCreated, status_code=status.HTTP_201_CREATED)
@@ -114,4 +120,39 @@ def process_inspection_image_ocr(
         processed_at=ocr_result.created_at,
         raw_text=ocr_result.raw_text,
         results=ocr_result.detections,
+    )
+
+
+@router.post("/{inspection_id}/extract", response_model=ExtractionResponse)
+def extract_inspection_information(
+    inspection_id: UUID,
+    db: Session = Depends(get_db),
+    extraction_service: ExtractionService = Depends(get_extraction_service),
+) -> ExtractionResponse:
+    inspection = db.get(Inspection, inspection_id)
+    if inspection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    ocr_result = db.scalar(
+        select(OcrResult).where(OcrResult.inspection_id == inspection.id).order_by(OcrResult.created_at.desc())
+    )
+    if ocr_result is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="OCR must be run before information extraction.")
+
+    fields = extraction_service.extract(ocr_result.raw_text)
+    # Re-running extraction replaces only this interpretation layer, never OCR evidence.
+    db.execute(delete(ExtractedField).where(ExtractedField.ocr_result_id == ocr_result.id))
+    for field_name, field in fields.items():
+        db.add(ExtractedField(
+            inspection_id=inspection.id,
+            ocr_result_id=ocr_result.id,
+            field_name=field_name,
+            value=field.value,
+            confidence=field.confidence,
+            review_status="REVIEW" if field.needs_review else "EXTRACTED",
+        ))
+    db.commit()
+    return ExtractionResponse(
+        inspection_id=inspection.id,
+        ocr_result_id=ocr_result.id,
+        fields={name: ExtractionFieldResponse(**field.__dict__) for name, field in fields.items()},
     )

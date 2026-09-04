@@ -45,3 +45,18 @@ class OcrProcessed(BaseModel):
     processed_at: datetime
     raw_text: str
     results: list[OcrDetectionResponse]
+
+
+class ExtractionFieldResponse(BaseModel):
+    value: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    needs_review: bool
+    source_text: str | None = None
+    matched_pattern: str | None = None
+    normalized_value: str | None = None
+
+
+class ExtractionResponse(BaseModel):
+    inspection_id: UUID
+    ocr_result_id: UUID
+    fields: dict[str, ExtractionFieldResponse]

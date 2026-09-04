@@ -49,6 +49,12 @@ The response contains only OCR data, for example:
 
 Model downloads may occur the first time PaddleOCR processes an image. The endpoint is `POST /api/inspections/{inspection_id}/images/{image_id}/ocr`.
 
+## Information extraction (Milestone 6)
+
+After OCR, `POST /api/inspections/{inspection_id}/extract` deterministically interprets the preserved OCR text into package-label fields such as entities, addresses, MRP, net quantity, dates, and consumer-care details. Each field includes heuristic confidence, a review flag, and source evidence. These are explainable extraction heuristics rather than calibrated probabilities; missing information is never fabricated and raw OCR evidence is not changed.
+
+Extraction is inspection assistance only and does not make legal or compliance decisions. Compliance rules are intentionally deferred to Milestone 7.
+
 ## Run locally
 
 Start PostgreSQL with `docker compose up db -d`, then in separate terminals run:
@@ -85,9 +91,9 @@ docker-compose.yml
 
 ## UI Languages
 
-The interface offers 23 language options: English, Hindi, Assamese, Bengali, Bodo, Dogri, Gujarati, Kannada, Kashmiri, Konkani, Maithili, Malayalam, Manipuri (Meitei), Marathi, Nepali, Odia, Punjabi, Sanskrit, Santali, Sindhi, Tamil, Telugu, and Urdu. English is the fallback for any wording that does not yet have a reviewed translation. The header selector is accessible, persists under `labelguard-language`, and restores English when its stored value is invalid.
+The interface offers 23 fully translated language options: English, Hindi, Assamese, Bengali, Bodo, Dogri, Gujarati, Kannada, Kashmiri, Konkani, Maithili, Malayalam, Manipuri (Meitei), Marathi, Nepali, Odia, Punjabi, Sanskrit, Santali, Sindhi, Tamil, Telugu, and Urdu. The header selector is accessible, persists under `labelguard-language`, and restores English when its stored value is invalid.
 
-Translations live in `frontend/src/locales/`. Add a locale JSON file, register its code and native display name in `frontend/src/i18n.tsx`, and add reviewed translations incrementally; missing keys automatically use English.
+Translations live in `frontend/src/locales/`. Each locale JSON file must contain every UI key with its reviewed native-language value; the app rejects incomplete locale files rather than silently rendering English.
 
 ## OCR Languages
 

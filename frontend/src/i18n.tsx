@@ -30,7 +30,28 @@ export type Locale = (typeof UI_LANGUAGES)[number]["code"];
 export const LANGUAGE_STORAGE_KEY = "labelguard-language";
 
 type TranslationKey = keyof typeof en;
-const translations: Record<Locale, Partial<Record<TranslationKey, string>>> = { en, hi, as, bn, brx, doi, gu, kn, ks, kok, mai, ml, mni, mr, ne, or, pa, sa, sat, sd, ta, te, ur };
+type LocaleTranslations = Record<TranslationKey, string>;
+
+function defineLocale(locale: Record<string, string>): LocaleTranslations {
+  const englishKeys = Object.keys(en).sort();
+  const localeKeys = Object.keys(locale).sort();
+  if (englishKeys.length !== localeKeys.length || englishKeys.some((key, index) => key !== localeKeys[index])) {
+    throw new Error("Each locale must provide every UI translation key.");
+  }
+  return locale as LocaleTranslations;
+}
+
+// A selected locale is never merged with English: all UI values must come
+// directly from the selected locale's complete, reviewed translation file.
+const translations: Record<Locale, LocaleTranslations> = {
+  en: defineLocale(en), hi: defineLocale(hi), as: defineLocale(as), bn: defineLocale(bn),
+  brx: defineLocale(brx), doi: defineLocale(doi), gu: defineLocale(gu), kn: defineLocale(kn),
+  ks: defineLocale(ks), kok: defineLocale(kok), mai: defineLocale(mai), ml: defineLocale(ml),
+  mni: defineLocale(mni), mr: defineLocale(mr), ne: defineLocale(ne), or: defineLocale(or),
+  pa: defineLocale(pa), sa: defineLocale(sa), sat: defineLocale(sat), sd: defineLocale(sd),
+  ta: defineLocale(ta), te: defineLocale(te), ur: defineLocale(ur),
+};
+export { translations };
 
 type I18nValue = {
   locale: Locale;
@@ -57,7 +78,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useMemo<I18nValue>(() => ({
     locale,
     setLocale,
-    t: (key) => translations[locale][key] ?? en[key],
+    t: (key) => translations[locale][key],
   }), [locale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
