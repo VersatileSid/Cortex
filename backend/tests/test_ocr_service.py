@@ -1,6 +1,8 @@
 from pathlib import Path
 from io import BytesIO
+from types import SimpleNamespace
 from uuid import UUID, uuid4
+import sys
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -32,6 +34,21 @@ def test_ocr_service_accepts_an_injected_engine() -> None:
     assert document[0].text == "MRP Rs 50"
     assert document[0].confidence == 0.96
     assert document[0].bbox == [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]]
+
+
+def test_paddle_engine_disables_onednn_for_compatible_cpu_ocr(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    class PaddleOCR:
+        def __init__(self, **kwargs) -> None:
+            received.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "paddleocr", SimpleNamespace(PaddleOCR=PaddleOCR))
+
+    PaddleOcrService()._get_engine("en")
+
+    assert received["lang"] == "en"
+    assert received["enable_mkldnn"] is False
 
 
 def test_v3_prediction_parser_preserves_text_score_and_box() -> None:

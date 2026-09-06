@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.models.base import Base, IdTimestampMixin
 
@@ -103,6 +103,11 @@ class ComplianceResult(IdTimestampMixin, Base):
     rule_id: Mapped[UUID] = mapped_column(ForeignKey("compliance_rules.id", ondelete="RESTRICT"), nullable=False)
     result: Mapped[str] = mapped_column(String(30), nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    field_name: Mapped[str | None] = mapped_column(String(100))
+    value: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    evidence: Mapped[str | None] = mapped_column(Text)
+    rule: Mapped[ComplianceRule] = relationship()
 
 
 class InspectionIssue(IdTimestampMixin, Base):

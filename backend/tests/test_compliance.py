@@ -1,0 +1,86 @@
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from backend.app.core.database import get_db
+from backend.app.main import app
+from backend.app.models import Base, ComplianceResult, ExtractedField, OcrResult
+from backend.app.services.compliance.rule_engine import ComplianceEngine, FieldEvidence
+
+
+def evidence(**values: FieldEvidence) -> dict[str, FieldEvidence]:
+    return values
+
+
+def test_valid_label_rules_pass() -> None:
+    findings = ComplianceEngine().evaluate(evidence(
+        product_name=FieldEvidence("Biscuits", .95), manufacturer=FieldEvidence("ABC Foods", .95),
+        packer=FieldEvidence("XYZ Pack", .95), importer=FieldEvidence("Example Imports", .95),
+        mrp=FieldEvidence("₹100", .97), net_quantity=FieldEvidence("500 g", .96),
+        manufacturing_date=FieldEvidence("08/2026", .94), expiry_date=FieldEvidence("12/2026", .94),
+        consumer_care_email=FieldEvidence("care@example.com", .96),
+    ))
+    assert {finding.status for finding in findings} == {"PASS"}
+
+
+def test_invalid_values_dates_and_uncertainty_are_explainable() -> None:
+    findings = ComplianceEngine().evaluate(evidence(
+        product_name=FieldEvidence("Product", .4, True), mrp=FieldEvidence("₹0", .9),
+        net_quantity=FieldEvidence("seven boxes", .9), manufacturing_date=FieldEvidence("12/2026", .9),
+        expiry_date=FieldEvidence("08/2026", .9), consumer_care_email=FieldEvidence("not-an-email", .9),
+    ))
+    by_rule = {finding.rule_id: finding for finding in findings}
+    assert by_rule["MRP_FORMAT"].status == "FAIL"
+    assert by_rule["NET_QUANTITY_FORMAT"].status == "FAIL"
+    assert by_rule["DATE_CONSISTENCY"].status == "FAIL"
+    assert by_rule["CONSUMER_CARE_FORMAT"].status == "REVIEW"
+    assert by_rule["LOW_CONFIDENCE_PRODUCT_NAME"].status == "REVIEW"
+
+
+def test_ambiguous_date_requires_review() -> None:
+    finding = next(finding for finding in ComplianceEngine().evaluate(evidence(manufacturing_date=FieldEvidence("sometime soon", .9))) if finding.rule_id == "DATE_CONSISTENCY")
+    assert finding.status == "REVIEW"
+
+
+def test_compliance_api_persists_and_replaces_deterministically() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+
+    def override_db():
+        with sessions() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        client = TestClient(app)
+        inspection = client.post("/api/inspections", json={}).json()
+        with sessions() as session:
+            ocr = OcrResult(inspection_id=UUID(inspection["id"]), raw_text="label", languages=["en"], detections=[])
+            session.add(ocr); session.flush()
+            for name, value in {"product_name": "Biscuits", "manufacturer": "ABC Foods", "packer": "XYZ", "importer": "Imports", "mrp": "₹100", "net_quantity": "500 g", "manufacturing_date": "08/2026", "expiry_date": "12/2026", "consumer_care_email": "care@example.com"}.items():
+                session.add(ExtractedField(inspection_id=ocr.inspection_id, ocr_result_id=ocr.id, field_name=name, value=value, confidence=Decimal("0.95"), review_status="EXTRACTED"))
+            session.commit()
+        response = client.post(f"/api/inspections/{inspection['id']}/compliance")
+        assert response.status_code == 200
+        assert response.json()["overall_status"] == "PASS"
+        assert response.json()["summary"]["failed"] == 0
+        rerun = client.post(f"/api/inspections/{inspection['id']}/compliance")
+        assert rerun.status_code == 200 and rerun.json() == response.json()
+        assert client.get(f"/api/inspections/{inspection['id']}/compliance").json() == response.json()
+        with sessions() as session:
+            assert session.scalar(select(ComplianceResult).where(ComplianceResult.inspection_id == UUID(inspection["id"]))) is not None
+        assert client.post(f"/api/inspections/{uuid4()}/compliance").status_code == 404
+        waiting = client.post("/api/inspections", json={}).json()
+        assert client.post(f"/api/inspections/{waiting['id']}/compliance").status_code == 409
+        with sessions() as session:
+            session.add(OcrResult(inspection_id=UUID(waiting["id"]), raw_text="label", languages=["en"], detections=[]))
+            session.commit()
+        assert client.post(f"/api/inspections/{waiting['id']}/compliance").status_code == 409
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()

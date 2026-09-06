@@ -60,3 +60,28 @@ class ExtractionResponse(BaseModel):
     inspection_id: UUID
     ocr_result_id: UUID
     fields: dict[str, ExtractionFieldResponse]
+
+
+class ComplianceSummary(BaseModel):
+    passed: int
+    failed: int
+    review: int
+
+
+class ComplianceFindingResponse(BaseModel):
+    rule_id: str
+    rule_name: str
+    status: str
+    severity: str
+    message: str
+    field: str | None = None
+    value: str | None = None
+    confidence: float | None = None
+    evidence: str | None = None
+
+
+class ComplianceResponse(BaseModel):
+    inspection_id: UUID
+    overall_status: str
+    summary: ComplianceSummary
+    findings: list[ComplianceFindingResponse]

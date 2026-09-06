@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
-from backend.app.models import ExtractedField, Inspection, InspectionImage, OcrResult
-from backend.app.schemas.inspection import ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
+from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult
+from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
+from backend.app.services.compliance import ComplianceEngine
+from backend.app.services.compliance.rule_engine import FieldEvidence, RULES
 from backend.app.services.extraction import ExtractionService
 from backend.app.services.ocr import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, store_image, validate_image
@@ -27,6 +29,28 @@ def get_ocr_service() -> PaddleOcrService:
 
 def get_extraction_service() -> ExtractionService:
     return ExtractionService()
+
+
+def get_compliance_engine() -> ComplianceEngine:
+    return ComplianceEngine()
+
+
+def _compliance_response(inspection_id: UUID, results: list[ComplianceResult]) -> ComplianceResponse:
+    findings = [ComplianceFindingResponse(rule_id=result.rule.rule_code, rule_name=result.rule.description.split(".", 1)[0], status=result.result, severity=result.rule.severity, message=result.explanation, field=result.field_name, value=result.value, confidence=float(result.confidence) if result.confidence is not None else None, evidence=result.evidence) for result in results]
+    counts = {name: sum(finding.status == name for finding in findings) for name in ("PASS", "FAIL", "REVIEW")}
+    overall = "FAIL" if counts["FAIL"] else "REVIEW" if counts["REVIEW"] else "PASS"
+    return ComplianceResponse(inspection_id=inspection_id, overall_status=overall, summary=ComplianceSummary(passed=counts["PASS"], failed=counts["FAIL"], review=counts["REVIEW"]), findings=findings)
+
+
+def _ensure_compliance_rules(db: Session) -> dict[str, ComplianceRule]:
+    existing = {rule.rule_code: rule for rule in db.scalars(select(ComplianceRule)).all()}
+    for code, name, target_field, severity in RULES:
+        if code not in existing:
+            rule = ComplianceRule(rule_code=code, description=f"{name}. Deterministic extraction-evidence check; it is not a legal determination.", target_field=target_field, severity=severity, enabled=True, configuration={})
+            db.add(rule)
+            existing[code] = rule
+    db.flush()
+    return existing
 
 
 @router.post("", response_model=InspectionCreated, status_code=status.HTTP_201_CREATED)
@@ -156,3 +180,42 @@ def extract_inspection_information(
         ocr_result_id=ocr_result.id,
         fields={name: ExtractionFieldResponse(**field.__dict__) for name, field in fields.items()},
     )
+
+
+@router.post("/{inspection_id}/compliance", response_model=ComplianceResponse)
+def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db), compliance_engine: ComplianceEngine = Depends(get_compliance_engine)) -> ComplianceResponse:
+    inspection = db.get(Inspection, inspection_id)
+    if inspection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    ocr_result = db.scalar(select(OcrResult).where(OcrResult.inspection_id == inspection.id).order_by(OcrResult.created_at.desc()))
+    if ocr_result is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="OCR must be run before compliance analysis.")
+    extracted = db.scalars(select(ExtractedField).where(ExtractedField.ocr_result_id == ocr_result.id)).all()
+    if not extracted:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Information extraction must be run before compliance analysis.")
+    fields = {field.field_name: FieldEvidence(value=field.value, confidence=float(field.confidence) if field.confidence is not None else None, needs_review=field.review_status == "REVIEW", evidence=field.value) for field in extracted}
+    rules = _ensure_compliance_rules(db)
+    existing = {result.rule_id: result for result in db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id)).all()}
+    for finding in compliance_engine.evaluate(fields):
+        rule = rules.get(finding.rule_id)
+        if rule is None or not rule.enabled:
+            continue
+        result = existing.get(rule.id)
+        if result is None:
+            result = ComplianceResult(inspection_id=inspection.id, rule_id=rule.id, result=finding.status, explanation=finding.message)
+            db.add(result)
+        result.result, result.explanation, result.field_name = finding.status, finding.message, finding.field
+        result.value, result.confidence, result.evidence = finding.value, finding.confidence, finding.evidence
+    db.commit()
+    persisted = db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id).join(ComplianceRule).order_by(ComplianceRule.rule_code)).all()
+    return _compliance_response(inspection.id, persisted)
+
+
+@router.get("/{inspection_id}/compliance", response_model=ComplianceResponse)
+def get_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db)) -> ComplianceResponse:
+    if db.get(Inspection, inspection_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    results = db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection_id).join(ComplianceRule).order_by(ComplianceRule.rule_code)).all()
+    if not results:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Compliance analysis has not been run.")
+    return _compliance_response(inspection_id, results)

@@ -111,6 +111,14 @@ describe("translations", () => {
     expect(document.querySelector(".raw-text")?.textContent).toBe(rawText);
   });
 
+  it("shows the API status and detail for an upload failure during development", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ detail: "Database unavailable." }) }));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() });
+    renderApp();
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(["image"], "label.png", { type: "image/png" })] } });
+    expect((await screen.findByRole("status")).textContent).toContain("500: Database unavailable.");
+  });
+
   it("renders translated extraction labels while preserving extracted values", async () => {
     const rawText = "MRP ₹100\nManufactured by ABC Foods";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ id: "inspection-1", inspection_number: "INSP-001" }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ id: "image-1", original_filename: "label.png" }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ raw_text: rawText, languages: ["en"], results: [] }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ fields: { manufacturer: { value: "ABC Foods", confidence: 0.94, needs_review: false }, importer: { value: null, confidence: 0, needs_review: false } } }) }));
@@ -133,5 +141,25 @@ describe("translations", () => {
       expect(screen.getByText("ABC Foods")).toBeTruthy();
     }
     expect(document.querySelector(".raw-text")?.textContent).toBe(rawText);
+  });
+
+  it("runs and displays deterministic compliance findings after extraction", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "inspection-1", inspection_number: "INSP-001" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "image-1", original_filename: "label.png" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ raw_text: "MRP Rs 100", languages: ["en"], results: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ fields: { mrp: { value: "₹100", confidence: .97, needs_review: false } } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ overall_status: "REVIEW", summary: { passed: 1, failed: 0, review: 1 }, findings: [{ rule_id: "MRP_FORMAT", rule_name: "MRP format", status: "PASS", severity: "WARNING", message: "Valid MRP", field: "mrp", value: "₹100", confidence: .97, evidence: "MRP: ₹100" }] }) }));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() });
+    renderApp();
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(["image"], "label.png", { type: "image/png" })] } });
+    await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: en.scanLabel }));
+    await screen.findByText("MRP Rs 100");
+    fireEvent.click(screen.getByRole("button", { name: en.extractInformation }));
+    await screen.findByText("₹100");
+    fireEvent.click(screen.getByRole("button", { name: en.compliance }));
+    expect(await screen.findByText("MRP format — PASS (WARNING)")).toBeTruthy();
+    expect(screen.getByText(/Compliance status: REVIEW/)).toBeTruthy();
   });
 });

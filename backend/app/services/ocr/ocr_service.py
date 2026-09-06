@@ -6,6 +6,7 @@ same `scan` method without changing routes or database persistence.
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
 import tempfile
 from typing import Any
@@ -56,6 +57,10 @@ class PaddleOcrService:
         if language in self._engines:
             return self._engines[language]
         try:
+            # Keep model downloads and file locks inside the application
+            # workspace.  The upstream default is the user's home directory,
+            # which can be unavailable to a service account on Windows.
+            os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(Path(".paddlex").resolve()))
             from paddleocr import PaddleOCR
 
             # PaddleOCR 3 uses the unified predict interface. The options keep
@@ -65,6 +70,11 @@ class PaddleOcrService:
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
+                # Paddle's oneDNN CPU executor currently raises an
+                # ``NotImplementedError`` on Windows for the bundled OCR
+                # detection model.  The standard CPU executor is compatible
+                # and keeps OCR available across the supported local setup.
+                enable_mkldnn=False,
             )
         except ImportError as error:
             raise OcrInitializationError("PaddleOCR is not installed on this server.") from error
