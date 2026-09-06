@@ -1,4 +1,7 @@
 from datetime import datetime, timezone
+from functools import lru_cache
+import logging
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -8,23 +11,33 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
 from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult
-from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, OcrProcessed
+from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, InspectionSummary, OcrProcessed
 from backend.app.services.compliance import ComplianceEngine
 from backend.app.services.compliance.rule_engine import FieldEvidence, RULES
 from backend.app.services.extraction import ExtractionService
 from backend.app.services.ocr import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, store_image, validate_image
+from backend.app.services.workflow import InspectionWorkflow, WorkflowError
 
 router = APIRouter(prefix="/inspections", tags=["inspections"])
+logger = logging.getLogger("uvicorn.error")
 
 
 def make_inspection_number() -> str:
     return f"LG-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
 
 
+@lru_cache
 def get_ocr_service() -> PaddleOcrService:
     """Dependency factory kept separate so tests and future providers can replace it."""
-    return PaddleOcrService(languages=get_ocr_languages())
+    settings = get_settings()
+    return PaddleOcrService(
+        languages=get_ocr_languages(settings),
+        max_image_dimension=settings.ocr_max_image_dimension,
+        secondary_language_max_image_dimension=settings.ocr_secondary_language_max_image_dimension,
+        secondary_language_timeout_seconds=settings.ocr_secondary_language_timeout_seconds,
+        recognition_batch_size=settings.ocr_recognition_batch_size,
+    )
 
 
 def get_extraction_service() -> ExtractionService:
@@ -33,6 +46,11 @@ def get_extraction_service() -> ExtractionService:
 
 def get_compliance_engine() -> ComplianceEngine:
     return ComplianceEngine()
+
+
+def get_workflow(db: Session = Depends(get_db), ocr_service: PaddleOcrService = Depends(get_ocr_service), extraction_service: ExtractionService = Depends(get_extraction_service), compliance_engine: ComplianceEngine = Depends(get_compliance_engine)) -> InspectionWorkflow:
+    settings = get_settings()
+    return InspectionWorkflow(db, ocr_service, extraction_service, compliance_engine, settings.upload_dir, settings.max_upload_bytes)
 
 
 def _compliance_response(inspection_id: UUID, results: list[ComplianceResult]) -> ComplianceResponse:
@@ -60,6 +78,7 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db)) 
         manufacturer_id=payload.manufacturer_id,
         product_id=payload.product_id,
         notes=payload.notes,
+        status="CREATED",
     )
     db.add(inspection)
     db.commit()
@@ -88,9 +107,30 @@ async def upload_inspection_image(
 
     image_record = InspectionImage(inspection_id=inspection.id, **stored.__dict__)
     db.add(image_record)
+    inspection.status = "IMAGE_UPLOADED"
+    inspection.failure_stage = inspection.failure_message = None
     db.commit()
     db.refresh(image_record)
     return image_record
+
+
+@router.post("/{inspection_id}/process", response_model=InspectionSummary)
+def process_inspection(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow)) -> InspectionSummary:
+    """Run any unfinished stage once; safe to call again after success or failure."""
+    try:
+        return workflow.process(inspection_id)
+    except KeyError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except WorkflowError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.message) from error
+
+
+@router.get("/{inspection_id}", response_model=InspectionSummary)
+def get_inspection_summary(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow)) -> InspectionSummary:
+    try:
+        return workflow.summary(inspection_id)
+    except KeyError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
 
 @router.post("/{inspection_id}/images/{image_id}/ocr", response_model=OcrProcessed, status_code=status.HTTP_201_CREATED)
@@ -100,6 +140,8 @@ def process_inspection_image_ocr(
     db: Session = Depends(get_db),
     ocr_service: PaddleOcrService = Depends(get_ocr_service),
 ) -> OcrProcessed:
+    started = perf_counter()
+    logger.info("OCR route started inspection_id=%s image_id=%s", inspection_id, image_id)
     inspection = db.get(Inspection, inspection_id)
     if inspection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
@@ -132,9 +174,11 @@ def process_inspection_image_ocr(
         raw_text=document.raw_text,
         detections=document.as_database_detections(),
     )
+    logger.info("OCR persistence started inspection_id=%s", inspection_id)
     db.add(ocr_result)
     db.commit()
     db.refresh(ocr_result)
+    logger.info("OCR route completed inspection_id=%s elapsed_seconds=%.3f", inspection_id, perf_counter() - started)
     return OcrProcessed(
         id=ocr_result.id,
         inspection_id=ocr_result.inspection_id,

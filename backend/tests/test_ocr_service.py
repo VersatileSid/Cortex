@@ -49,6 +49,19 @@ def test_paddle_engine_disables_onednn_for_compatible_cpu_ocr(monkeypatch) -> No
 
     assert received["lang"] == "en"
     assert received["enable_mkldnn"] is False
+    assert received["text_recognition_batch_size"] == 8
+
+
+def test_preprocessing_downscales_large_camera_images(tmp_path) -> None:
+    image_path = tmp_path / "large.png"
+    Image.new("RGB", (2400, 1200), color="white").save(image_path)
+
+    processed = PaddleOcrService._preprocess(image_path, max_image_dimension=1200)
+
+    try:
+        assert Image.open(processed).size == (1200, 600)
+    finally:
+        processed.unlink(missing_ok=True)
 
 
 def test_v3_prediction_parser_preserves_text_score_and_box() -> None:

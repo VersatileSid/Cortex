@@ -85,3 +85,19 @@ class ComplianceResponse(BaseModel):
     overall_status: str
     summary: ComplianceSummary
     findings: list[ComplianceFindingResponse]
+
+
+class InspectionSummary(BaseModel):
+    """The persisted, user-facing state of an inspection workflow."""
+    id: UUID
+    inspection_number: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    failure_stage: str | None = None
+    failure_message: str | None = None
+    image: ImageUploaded | None = None
+    ocr: OcrProcessed | None = None
+    extraction: ExtractionResponse | None = None
+    compliance: ComplianceResponse | None = None

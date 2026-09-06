@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://labelguard:labelguard@localhost:5432/labelguard"
     upload_dir: Path = Path("uploads")
     max_upload_bytes: int = 10 * 1024 * 1024
+    # Full-resolution phone photographs can make CPU OCR take many minutes.
+    # This remains configurable for deployments with unusually small print.
+    ocr_max_image_dimension: int = 640
+    # Secondary multilingual passes use a smaller image to avoid a very dense
+    # Latin label producing hundreds of unnecessary non-primary script crops.
+    ocr_secondary_language_max_image_dimension: int = 320
+    ocr_secondary_language_timeout_seconds: int = 45
+    # PaddleOCR 3.7 accepts this directly. Batching recognition crops is
+    # important for dense package labels on the Windows CPU runtime.
+    ocr_recognition_batch_size: int = 8
     ocr_languages: str = "en,hi,gom,mai,mr,ne,sa,ta,te,ur,ka"
 
     model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, env_file_encoding="utf-8", extra="ignore")

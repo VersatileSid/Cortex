@@ -45,9 +45,12 @@ class Inspection(IdTimestampMixin, Base):
     inspector_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     manufacturer_id: Mapped[UUID | None] = mapped_column(ForeignKey("manufacturers.id", ondelete="SET NULL"), index=True)
     product_id: Mapped[UUID | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), index=True)
-    status: Mapped[str] = mapped_column(String(30), default="DRAFT", index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="CREATED", index=True, nullable=False)
     inspected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_stage: Mapped[str | None] = mapped_column(String(30))
+    failure_message: Mapped[str | None] = mapped_column(Text)
 
 
 class InspectionImage(IdTimestampMixin, Base):
