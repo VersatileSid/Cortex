@@ -18,6 +18,23 @@ class InspectionCreated(BaseModel):
     status: str
     inspected_at: datetime
 
+class InspectionHistoryItem(BaseModel):
+    id: UUID
+    inspection_number: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    product_name: str | None = None
+    compliance_status: str | None = None
+    image_filename: str | None = None
+
+class InspectionHistoryPage(BaseModel):
+    items: list[InspectionHistoryItem]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
 
 class ImageUploaded(BaseModel):
     model_config = ConfigDict(from_attributes=True)

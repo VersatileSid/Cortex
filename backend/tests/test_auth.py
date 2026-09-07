@@ -164,6 +164,29 @@ def test_owner_can_access_own_inspection(authenticated_client) -> None:
     assert authenticated_client.get(f"/api/inspections/{inspection['id']}").status_code == 200
 
 
+def test_history_is_paginated_newest_first_and_never_leaks_other_users(
+    authenticated_client, second_authenticated_client, auth_database, test_user, second_test_user,
+) -> None:
+    """The collection endpoint applies ownership before every filter and page."""
+    with auth_database() as db:
+        older = Inspection(inspection_number="LG-HISTORY-OLDER", user_id=test_user.id, status="CREATED")
+        newer = Inspection(inspection_number="LG-HISTORY-NEWER", user_id=test_user.id, status="COMPLETED")
+        other = Inspection(inspection_number="LG-HISTORY-OTHER", user_id=second_test_user.id, status="COMPLETED")
+        db.add_all((older, newer, other)); db.commit()
+        newer.created_at = datetime.now(timezone.utc) + timedelta(seconds=1); db.commit()
+
+    response = authenticated_client.get("/api/inspections?page=1&page_size=1")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2 and payload["total_pages"] == 2
+    assert payload["items"][0]["inspection_number"] == "LG-HISTORY-NEWER"
+    assert authenticated_client.get("/api/inspections?search=OLDER").json()["items"][0]["inspection_number"] == "LG-HISTORY-OLDER"
+    assert authenticated_client.get("/api/inspections?status=COMPLETED").json()["total"] == 1
+    assert second_authenticated_client.get("/api/inspections").json()["items"][0]["inspection_number"] == "LG-HISTORY-OTHER"
+    assert authenticated_client.get("/api/inspections?page=0").status_code == 422
+    assert authenticated_client.get("/api/inspections?page_size=101").status_code == 422
+
+
 @pytest.fixture
 def owned_inspection(authenticated_client) -> dict:
     response = authenticated_client.post("/api/inspections", json={})

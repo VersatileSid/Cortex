@@ -4,14 +4,14 @@ import logging
 from time import perf_counter
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import delete, select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
-from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult
-from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, InspectionSummary, OcrProcessed
+from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult, Product
+from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, InspectionHistoryItem, InspectionHistoryPage, InspectionSummary, OcrProcessed
 from backend.app.services.compliance import ComplianceEngine
 from backend.app.services.compliance.rule_engine import FieldEvidence, RULES
 from backend.app.services.extraction import ExtractionService
@@ -94,6 +94,36 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
     db.commit()
     db.refresh(inspection)
     return inspection
+
+@router.get("", response_model=InspectionHistoryPage)
+def list_inspections(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None, max_length=255),
+    status_filter: str | None = Query(None, alias="status", max_length=30),
+    compliance_status: str | None = Query(None, max_length=30),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> InspectionHistoryPage:
+    """Return a compact, newest-first history owned exclusively by ``user``."""
+    latest_image = select(InspectionImage.original_filename).where(InspectionImage.inspection_id == Inspection.id).order_by(InspectionImage.created_at.desc()).limit(1).scalar_subquery()
+    latest_compliance = select(ComplianceResult.result).where(ComplianceResult.inspection_id == Inspection.id).order_by(ComplianceResult.updated_at.desc()).limit(1).scalar_subquery()
+    query = select(Inspection, Product.name, latest_image, latest_compliance).outerjoin(Product, Product.id == Inspection.product_id).where(Inspection.user_id == user.id)
+    count_query = select(func.count()).select_from(Inspection).outerjoin(Product, Product.id == Inspection.product_id).where(Inspection.user_id == user.id)
+    if search and (term := search.strip()):
+        predicate = or_(Product.name.ilike(f"%{term}%"), Inspection.inspection_number.ilike(f"%{term}%"))
+        query = query.where(predicate)
+        count_query = count_query.where(predicate)
+    if status_filter:
+        query = query.where(Inspection.status == status_filter)
+        count_query = count_query.where(Inspection.status == status_filter)
+    if compliance_status:
+        normalized_compliance = "REVIEW" if compliance_status == "WARNING" else compliance_status
+        query = query.where(latest_compliance == normalized_compliance)
+        count_query = count_query.where(latest_compliance == normalized_compliance)
+    total = db.scalar(count_query) or 0
+    rows = db.execute(query.order_by(Inspection.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return InspectionHistoryPage(items=[InspectionHistoryItem(id=i.id, inspection_number=i.inspection_number, status=i.status, created_at=i.created_at, updated_at=i.updated_at, product_name=name, image_filename=image, compliance_status=compliance) for i, name, image, compliance in rows], page=page, page_size=page_size, total=total, total_pages=(total + page_size - 1) // page_size)
 
 
 @router.post("/{inspection_id}/image", response_model=ImageUploaded, status_code=status.HTTP_201_CREATED)
