@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { UI_LANGUAGES, useI18n } from "./i18n";
 
 type Field = { value: string | null; confidence: number; needs_review: boolean };
@@ -7,12 +7,14 @@ type Summary = { id: string; inspection_number: string; status: string; failure_
 type ApiError = Error & { detail?: string };
 type HistoryItem = { id: string; inspection_number: string; status: string; created_at: string; updated_at: string; product_name: string | null; compliance_status: string | null; image_filename: string | null };
 type HistoryResponse = { items: HistoryItem[]; page: number; page_size: number; total: number; total_pages: number };
-const API_URL = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api").replace(/\/$/, "");
+// SameSite=Lax development cookies must remain same-site.  Deriving the
+// fallback host from the page prevents a localhost UI from calling 127.0.0.1.
+const API_URL = (import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:8000/api`).replace(/\/$/, "");
 const labels: Record<string, string> = { product_name: "extractionProductName", manufacturer: "extractionManufacturer", manufacturer_address: "extractionManufacturerAddress", packer: "extractionPacker", packer_address: "extractionPackerAddress", importer: "extractionImporter", importer_address: "extractionImporterAddress", mrp: "extractionMrp", net_quantity: "extractionNetQuantity", manufacturing_date: "extractionManufacturingDate", packing_date: "extractionPackingDate", best_before: "extractionBestBefore", use_by: "extractionUseBy", expiry_date: "extractionExpiryDate", consumer_care_phone: "extractionConsumerCarePhone", consumer_care_email: "extractionConsumerCareEmail", consumer_care_website: "extractionConsumerCareWebsite" };
 
 async function api(path: string, operation: string, options: RequestInit = {}, timeout = 30_000): Promise<Response> {
   const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), timeout);
-  try { const response = await fetch(`${API_URL}${path}`, { credentials: "include", ...options, signal: controller.signal }); if (!response.ok) { const body = await response.json().catch(() => ({})); const error = new Error(operation) as ApiError; error.detail = `${response.status}${body.detail ? `: ${body.detail}` : ""}`; throw error; } return response; }
+  try { const response = await fetch(`${API_URL}${path}`, { ...options, credentials: "include", signal: controller.signal }); if (!response.ok) { const body = await response.json().catch(() => ({})); const error = new Error(operation) as ApiError; error.detail = `${response.status}${body.detail ? `: ${body.detail}` : ""}`; throw error; } return response; }
   catch (error) { if (controller.signal.aborted) { const timeoutError = new Error(operation) as ApiError; timeoutError.detail = "The inspection took too long. You can safely retry."; throw timeoutError; } throw error; }
   finally { window.clearTimeout(timer); }
 }
@@ -39,8 +41,8 @@ function AuthPage({ loading, error, onLogin, onRegister }: { loading: boolean; e
 export default function App() {
   const { t } = useI18n(); const [summary, setSummary] = useState<Summary | null>(null); const [preview, setPreview] = useState<string | null>(null); const [stage, setStage] = useState("CREATED"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"inspection" | "history">("inspection");
-  const [user, setUser] = useState<{ username: string } | null>(null); const [authLoading, setAuthLoading] = useState(true); const [authBusy, setAuthBusy] = useState(false); const [authError, setAuthError] = useState("");
-  async function loadUser() { try { setUser(await (await api("/auth/me", "authentication")).json()); } catch (e) { setUser(null); if ((e as ApiError).detail?.startsWith("401")) setAuthError(t("sessionExpired")); } finally { setAuthLoading(false); } }
+  const [user, setUser] = useState<{ username: string } | null>(null); const [authLoading, setAuthLoading] = useState(true); const [authBusy, setAuthBusy] = useState(false); const [authError, setAuthError] = useState(""); const authRequest = useRef(0);
+  async function loadUser() { const request = ++authRequest.current; try { const authenticatedUser = await (await api("/auth/me", "authentication")).json(); if (request === authRequest.current) setUser(authenticatedUser); } catch (e) { if (request === authRequest.current) { setUser(null); if ((e as ApiError).detail?.startsWith("401")) setAuthError(t("sessionExpired")); } } finally { if (request === authRequest.current) setAuthLoading(false); } }
   useEffect(() => { loadUser(); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   async function process(id: string) { setStage("OCR_PROCESSING"); const response = await api(`/inspections/${id}/process`, "process", { method: "POST" }, 120_000); const result: Summary = await response.json(); setSummary(result); setStage(result.status); }
@@ -49,7 +51,7 @@ export default function App() {
   function startNew() { setSummary(null); setStage("CREATED"); setError(null); setView("inspection"); if (preview) URL.revokeObjectURL(preview); setPreview(null); }
   async function viewInspection(id: string) { setBusy(true); setError(null); try { const result: Summary = await (await api(`/inspections/${id}`, "inspection")).json(); setSummary(result); setStage(result.status); setView("inspection"); } catch (e) { setError((e as ApiError).detail ?? t("historyLoadError")); setView("inspection"); } finally { setBusy(false); } }
   async function login(username: string, password: string) { setAuthBusy(true); setAuthError(""); try { await api("/auth/login", "login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) }); await loadUser(); } catch { setAuthError(t("invalidCredentials")); } finally { setAuthBusy(false); } }
-  async function register(data: { username: string; email: string; password: string }) { setAuthBusy(true); setAuthError(""); try { setUser(await (await api("/auth/register", "register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })).json()); } catch (e) { setAuthError((e as ApiError).detail?.startsWith("409") ? t("invalidRegistration") : t("registrationError")); } finally { setAuthBusy(false); } }
+  async function register(data: { username: string; email: string; password: string }) { setAuthBusy(true); setAuthError(""); try { await api("/auth/register", "register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); await loadUser(); } catch (e) { setAuthError((e as ApiError).detail?.startsWith("409") ? t("invalidRegistration") : t("registrationError")); } finally { setAuthBusy(false); } }
   async function logout() { await api("/auth/logout", "logout", { method: "POST" }).catch(() => undefined); setUser(null); startNew(); }
   if (authLoading) return <main className="app-shell"><p className="empty-state">{t("authenticationLoading")}</p></main>;
   if (!user) return <AuthPage loading={authBusy} error={authError} onLogin={login} onRegister={register} />;

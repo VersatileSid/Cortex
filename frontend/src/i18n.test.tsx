@@ -35,7 +35,7 @@ describe("inspection workflow UI", () => {
     renderApp();
     expect(await screen.findByText(en.sessionExpired)).toBeTruthy();
     expect(screen.getByRole("textbox", { name: en.username })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/auth/me", expect.objectContaining({ credentials: "include" }));
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/auth/me", expect.objectContaining({ credentials: "include" }));
   });
   it("renders the registration tab and detects a password mismatch", async () => {
     mockUnauthenticatedFetch(); renderApp();
@@ -47,11 +47,16 @@ describe("inspection workflow UI", () => {
     fireEvent.click(screen.getByRole("button", { name: en.registerAccount }));
     expect((await screen.findByRole("alert")).textContent).toBe(en.passwordsDoNotMatch);
   });
+  it("verifies the cookie-backed session after login before allowing protected work", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ username: "inspector" })).mockResolvedValueOnce(response({ username: "inspector" })); vi.stubGlobal("fetch", fetchMock); renderApp();
+    fireEvent.change(await screen.findByRole("textbox", { name: en.username }), { target: { value: "inspector" } }); fireEvent.change(screen.getByLabelText(en.password), { target: { value: "correct-password" } }); fireEvent.click(screen.getByRole("button", { name: en.signIn }));
+    expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/auth/login", expect.objectContaining({ method: "POST", credentials: "include" })); expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:8000/api/auth/me", expect.objectContaining({ credentials: "include" }));
+  });
   it("registers a user and enters the authenticated application", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ username: "new-user" })); vi.stubGlobal("fetch", fetchMock); renderApp();
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ username: "new-user" })).mockResolvedValueOnce(response({ username: "new-user" })); vi.stubGlobal("fetch", fetchMock); renderApp();
     fireEvent.click(await screen.findByRole("tab", { name: en.register }));
     fireEvent.change(screen.getByRole("textbox", { name: en.username }), { target: { value: "new-user" } }); fireEvent.change(screen.getByRole("textbox", { name: en.email }), { target: { value: "new@example.invalid" } }); fireEvent.change(screen.getByLabelText(en.password), { target: { value: "register-password" } }); fireEvent.change(screen.getByLabelText(en.confirmPassword), { target: { value: "register-password" } }); fireEvent.click(screen.getByRole("button", { name: en.registerAccount }));
-    expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(fetchMock).toHaveBeenLastCalledWith("http://127.0.0.1:8000/api/auth/register", expect.objectContaining({ method: "POST", credentials: "include" }));
+    expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/auth/register", expect.objectContaining({ method: "POST", credentials: "include" })); expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:8000/api/auth/me", expect.objectContaining({ credentials: "include" }));
   });
   it("shows a localized registration error", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ detail: "duplicate" }, false, 409)); vi.stubGlobal("fetch", fetchMock); renderApp(); fireEvent.click(await screen.findByRole("tab", { name: en.register })); fireEvent.change(screen.getByRole("textbox", { name: en.username }), { target: { value: "new-user" } }); fireEvent.change(screen.getByRole("textbox", { name: en.email }), { target: { value: "new@example.invalid" } }); fireEvent.change(screen.getByLabelText(en.password), { target: { value: "register-password" } }); fireEvent.change(screen.getByLabelText(en.confirmPassword), { target: { value: "register-password" } }); fireEvent.click(screen.getByRole("button", { name: en.registerAccount })); expect((await screen.findByRole("alert")).textContent).toBe(en.invalidRegistration);
