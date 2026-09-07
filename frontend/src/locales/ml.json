@@ -1,4 +1,6 @@
 {
+  "authHeadline": "Smart Package Label Inspection", "authDescription": "LabelGuard helps inspectors review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
+  "login": "ലോഗിൻ", "username": "ഉപയോക്തൃനാമം", "password": "പാസ്‌വേഡ്", "signIn": "സൈൻ ഇൻ", "signingIn": "സൈൻ ഇൻ ചെയ്യുന്നു…", "invalidCredentials": "അസാധുവായ ഉപയോക്തൃനാമമോ പാസ്‌വേഡോ.", "sessionExpired": "സെഷൻ അവസാനിച്ചു.", "logout": "ലോഗ് ഔട്ട്", "welcome": "സ്വാഗതം", "startNewInspection": "പുതിയ പരിശോധന ആരംഭിക്കുക", "authenticationLoading": "ആധികാരികത പരിശോധിക്കുന്നു…", "authenticationError": "ആധികാരികത പിശക്",
   "appName": "LabelGuard",
   "tagline": "പാക്കേജ്-ലേബൽ പരിശോധന സഹായം",
   "dashboard": "ഡാഷ്ബോർഡ്",

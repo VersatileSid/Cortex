@@ -1,4 +1,6 @@
 {
+  "authHeadline": "Smart Package Label Inspection", "authDescription": "LabelGuard helps inspectors review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
+  "login": "لاگ اِن", "username": "صارف نام", "password": "پاس ورڈ", "signIn": "سائن اِن", "signingIn": "سائن اِن ہو رہا ہے…", "invalidCredentials": "غلط صارف نام یا پاس ورڈ۔", "sessionExpired": "سیشن ختم ہو گیا ہے۔", "logout": "لاگ آؤٹ", "welcome": "خوش آمدید", "startNewInspection": "نیا معائنہ شروع کریں", "authenticationLoading": "تصدیق کی جانچ ہو رہی ہے…", "authenticationError": "تصدیق کی خرابی",
   "appName": "LabelGuard",
   "tagline": "پیکیج لیبل کے معائنے میں مدد",
   "dashboard": "ڈیش بورڈ",

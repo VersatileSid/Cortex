@@ -32,6 +32,7 @@ export const LANGUAGE_STORAGE_KEY = "labelguard-language";
 type TranslationKey = keyof typeof en;
 type LocaleTranslations = Record<TranslationKey, string>;
 
+
 function defineLocale(locale: Record<string, string>): LocaleTranslations {
   const englishKeys = Object.keys(en).sort();
   const localeKeys = Object.keys(locale).sort();

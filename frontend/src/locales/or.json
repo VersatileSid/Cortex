@@ -1,4 +1,6 @@
 {
+  "authHeadline": "Smart Package Label Inspection", "authDescription": "LabelGuard helps inspectors review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
+  "login": "ଲଗଇନ", "username": "ବ୍ୟବହାରକାରୀ ନାମ", "password": "ପାସୱାର୍ଡ", "signIn": "ସାଇନ ଇନ", "signingIn": "ସାଇନ ଇନ ହେଉଛି…", "invalidCredentials": "ଅବୈଧ ବ୍ୟବହାରକାରୀ ନାମ କିମ୍ବା ପାସୱାର୍ଡ।", "sessionExpired": "ସେସନ୍ ସମାପ୍ତ ହୋଇଛି।", "logout": "ଲଗ ଆଉଟ", "welcome": "ସ୍ୱାଗତ", "startNewInspection": "ନୂଆ ଯାଞ୍ଚ ଆରମ୍ଭ କରନ୍ତୁ", "authenticationLoading": "ପ୍ରମାଣୀକରଣ ଯାଞ୍ଚ ହେଉଛି…", "authenticationError": "ପ୍ରମାଣୀକରଣ ତ୍ରୁଟି",
   "appName": "LabelGuard",
   "tagline": "ପ୍ୟାକେଜ୍-ଲେବଲ୍ ଯାଞ୍ଚ ସହାୟତା |",
   "dashboard": "ଡ୍ୟାସବୋର୍ଡ |",

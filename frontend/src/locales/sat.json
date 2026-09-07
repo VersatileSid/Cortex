@@ -1,4 +1,6 @@
 {
+  "authHeadline": "Smart Package Label Inspection", "authDescription": "LabelGuard helps inspectors review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
+  "login": "ᱞᱚᱜᱤᱱ", "username": "ᱵᱮᱵᱷᱟᱨᱤᱡ ᱧᱩᱛᱩᱢ", "password": "ᱯᱟᱥᱣᱟᱨᱰ", "signIn": "ᱥᱟᱭᱤᱱ ᱤᱱ", "signingIn": "ᱥᱟᱭᱤᱱ ᱤᱱ ᱮᱫᱟᱭ…", "invalidCredentials": "ᱵᱟᱝ ᱴᱷᱤᱠ ᱧᱩᱛᱩᱢ ᱵᱟᱝ ᱯᱟᱥᱣᱟᱨᱰ।", "sessionExpired": "ᱥᱮᱥᱚᱱ ᱪᱟᱵᱟ ᱮᱱᱟ।", "logout": "ᱞᱚᱜ ᱟᱣᱩᱴ", "welcome": "ᱥᱩᱥᱣᱟᱜᱚᱛ", "startNewInspection": "ᱱᱟᱶᱟ ᱧᱮᱞ ᱮᱦᱚᱵ", "authenticationLoading": "ᱯᱨᱚᱢᱟᱱᱤᱠᱚᱨᱚᱱ ᱧᱮᱞᱮᱫᱟ…", "authenticationError": "ᱯᱨᱚᱢᱟᱱᱤᱠᱚᱨᱚᱱ ᱵᱷᱩᱞ",
   "appName": "LabelGuard",
   "tagline": "ᱯᱮᱠᱮᱡᱽ-ᱞᱮᱵᱮᱞ ᱧᱮᱞ ᱜᱚᱲᱚ",
   "dashboard": "ᱰᱮᱥᱵᱚᱨᱰ",

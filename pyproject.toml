@@ -19,6 +19,7 @@ dependencies = [
   "opencv-python-headless>=4.10,<5.0",
   "paddleocr>=3.0,<4.0",
   "paddlepaddle>=3.0,<4.0",
+  "cryptography>=43,<46",
 ]
 
 [project.optional-dependencies]

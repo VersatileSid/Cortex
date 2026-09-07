@@ -12,10 +12,18 @@ class User(IdTimestampMixin, Base):
     __tablename__ = "users"
 
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(100), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50), default="inspector", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class AuthSession(IdTimestampMixin, Base):
+    __tablename__ = "auth_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Manufacturer(IdTimestampMixin, Base):
@@ -43,6 +51,7 @@ class Inspection(IdTimestampMixin, Base):
 
     inspection_number: Mapped[str] = mapped_column(String(40), unique=True, index=True, nullable=False)
     inspector_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     manufacturer_id: Mapped[UUID | None] = mapped_column(ForeignKey("manufacturers.id", ondelete="SET NULL"), index=True)
     product_id: Mapped[UUID | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), index=True)
     status: Mapped[str] = mapped_column(String(30), default="CREATED", index=True, nullable=False)

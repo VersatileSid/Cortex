@@ -1,4 +1,6 @@
 {
+  "authHeadline": "স্মার্ট প্যাকেজ লেবেল পরিদর্শন", "authDescription": "লেবেলগার্ড পরিদর্শকদের প্যাকেজ লেবেল পর্যালোচনায় সহায় করে।", "authFeatureAi": "AI-সহায়তাপ্রাপ্ত লেবেল বিশ্লেষণ", "authFeatureOcr": "ইংরেজি ও হিন্দিতে OCR", "authFeatureCompliance": "সম্মতি-কেন্দ্রিক পরিদর্শন", "register": "নিবন্ধন", "createAccount": "অ্যাকাউন্ট তৈরি করুন", "email": "ইমেইল", "confirmPassword": "পাসওয়ার্ড নিশ্চিত করুন", "showPassword": "পাসওয়ার্ড দেখান", "hidePassword": "পাসওয়ার্ড লুকান", "registerAccount": "অ্যাকাউন্ট তৈরি করুন", "registering": "অ্যাকাউন্ট তৈরি হচ্ছে…", "passwordsDoNotMatch": "পাসওয়ার্ড মেলেনি।", "invalidRegistration": "বিবরণ দেখে আবার চেষ্টা করুন।", "registrationError": "অ্যাকাউন্ট তৈরি করা যায়নি।",
+  "login": "লগইন", "username": "ব্যবহারকারীর নাম", "password": "পাসওয়ার্ড", "signIn": "সাইন ইন", "signingIn": "সাইন ইন হচ্ছে…", "invalidCredentials": "অবৈধ ব্যবহারকারীর নাম বা পাসওয়ার্ড।", "sessionExpired": "সেশন শেষ হয়েছে।", "logout": "লগ আউট", "welcome": "স্বাগতম", "startNewInspection": "নতুন পরিদর্শন শুরু করুন", "authenticationLoading": "প্রমাণীকরণ পরীক্ষা করা হচ্ছে…", "authenticationError": "প্রমাণীকরণ ত্রুটি",
   "appName": "LabelGuard",
   "tagline": "প্যাকেজ-লেবেল পরিদর্শন সহায়তা",
   "dashboard": "ড্যাশবোর্ড",

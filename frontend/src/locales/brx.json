@@ -1,4 +1,6 @@
 {
+  "authHeadline": "स्मार्ट पैकेज लेबल निरीक्षण", "authDescription": "लेबलगार्ड निरीक्षकफोरखौ पैकेज लेबल नायनो मदद होयो।", "authFeatureAi": "AI-गोजौ लेबल बिस्लेसन", "authFeatureOcr": "इंराजि आरो हिन्दिआव OCR", "authFeatureCompliance": "नियम माननाय निरीक्षण", "register": "पञ्जीकरण", "createAccount": "एकाउन्ट सोरजिनाय", "email": "इमेइल", "confirmPassword": "पासवर्ड रोखा", "showPassword": "पासवर्ड नुथाय", "hidePassword": "पासवर्ड दोनथुम", "registerAccount": "एकाउन्ट सोरजि", "registering": "एकाउन्ट सोरजि दं…", "passwordsDoNotMatch": "पासवर्ड गोरोन्थि।", "invalidRegistration": "बिबरन नायखां।", "registrationError": "एकाउन्ट सोरजि नाजाबाय।",
+  "login": "ल'गिन", "username": "बाहायग्रा मुं", "password": "पासवर्ड", "signIn": "साइन इन", "signingIn": "साइन इन जाबाय…", "invalidCredentials": "गोरोन्थि बाहायग्रा मुं एबा पासवर्ड।", "sessionExpired": "सेसन जोबबाय।", "logout": "लग आउट", "welcome": "स्वागतम", "startNewInspection": "गोदान निरीक्षण जागाय", "authenticationLoading": "प्रमाणीकरण नायगासिनो…", "authenticationError": "प्रमाणीकरण गोरोन्थि",
   "appName": "LabelGuard",
   "tagline": "पैकेज-लेबेल निरीक्षण मदद",
   "dashboard": "डैशबोर्ड",

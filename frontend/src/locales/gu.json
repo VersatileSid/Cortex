@@ -1,4 +1,6 @@
 {
+  "authHeadline": "સ્માર્ટ પેકેજ લેબલ નિરીક્ષણ", "authDescription": "લેબલગાર્ડ નિરીક્ષકોને પેકેજ લેબલની સમીક્ષામાં મદદ કરે છે.", "authFeatureAi": "AI-સહાયિત લેબલ વિશ્લેષણ", "authFeatureOcr": "અંગ્રેજી અને હિન્દીમાં OCR", "authFeatureCompliance": "અનુપાલન-કેન્દ્રિત નિરીક્ષણ", "register": "નોંધણી", "createAccount": "તમારું ખાતું બનાવો", "email": "ઈમેલ", "confirmPassword": "પાસવર્ડની પુષ્ટિ કરો", "showPassword": "પાસવર્ડ બતાવો", "hidePassword": "પાસવર્ડ છુપાવો", "registerAccount": "ખાતું બનાવો", "registering": "ખાતું બની રહ્યું છે…", "passwordsDoNotMatch": "પાસવર્ડ મેળ ખાતા નથી.", "invalidRegistration": "વિગતો તપાસી ફરી પ્રયાસ કરો.", "registrationError": "ખાતું બનાવી શકાયું નથી.",
+  "login": "લૉગિન", "username": "વપરાશકર્તા નામ", "password": "પાસવર્ડ", "signIn": "સાઇન ઇન", "signingIn": "સાઇન ઇન થઈ રહ્યું છે…", "invalidCredentials": "અમાન્ય વપરાશકર્તા નામ અથવા પાસવર્ડ.", "sessionExpired": "સત્ર સમાપ્ત થયું છે.", "logout": "લૉગ આઉટ", "welcome": "સ્વાગત છે", "startNewInspection": "નવી તપાસ શરૂ કરો", "authenticationLoading": "પ્રમાણીકરણ તપાસી રહ્યા છીએ…", "authenticationError": "પ્રમાણીકરણ ભૂલ",
   "appName": "LabelGuard",
   "tagline": "પેકેજ-લેબલ નિરીક્ષણ સહાય",
   "dashboard": "ડેશબોર્ડ",

@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:auth-locales": "node scripts/verify-auth-locales.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",

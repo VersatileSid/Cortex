@@ -8,25 +8,66 @@ import { I18nProvider, LANGUAGE_STORAGE_KEY, UI_LANGUAGES } from "./i18n";
 function renderApp() { return render(<I18nProvider><App /></I18nProvider>); }
 const file = () => new File(["image"], "label.png", { type: "image/png" });
 const result = { id: "inspection-1", inspection_number: "INSP-001", status: "COMPLETED", image: { id: "image-1", original_filename: "label.png" }, ocr: { raw_text: "MRP Rs 100", languages: ["en", "hi"], results: [] }, extraction: { fields: { manufacturer: { value: "ABC Foods", confidence: .94, needs_review: false }, mrp: { value: "Rs 100", confidence: .97, needs_review: false } } }, compliance: { overall_status: "REVIEW", summary: { passed: 1, failed: 0, review: 1 }, findings: [{ rule_id: "MRP_FORMAT", rule_name: "MRP format", status: "PASS", severity: "WARNING", message: "Valid MRP", field: "mrp", value: "Rs 100" }] } };
+const authenticatedUser = { username: "inspector" };
+const response = (body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body });
+
+function mockAuthenticatedFetch(...responses: ReturnType<typeof response>[]) {
+  const fetchMock = vi.fn().mockResolvedValueOnce(response(authenticatedUser));
+  for (const nextResponse of responses) fetchMock.mockResolvedValueOnce(nextResponse);
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function mockUnauthenticatedFetch() {
+  const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
 
 describe("inspection workflow UI", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => { localStorage.clear(); mockAuthenticatedFetch(); });
   afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
-  it("renders English and all language choices", () => { renderApp(); expect(screen.getByText(en.dashboard)).toBeTruthy(); expect(screen.getAllByRole("option")).toHaveLength(23); });
-  it("persists a language choice", () => { renderApp(); fireEvent.change(screen.getByRole("combobox"), { target: { value: "hi" } }); expect(screen.getByText(hi.dashboard)).toBeTruthy(); expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("hi"); });
+  it("renders English and all language choices", async () => { renderApp(); expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(screen.getAllByRole("option")).toHaveLength(23); });
+  it("persists a language choice", async () => { renderApp(); fireEvent.change(await screen.findByRole("combobox"), { target: { value: "hi" } }); expect(screen.getByText(hi.dashboard)).toBeTruthy(); expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("hi"); });
   it("has complete locale key sets", async () => { for (const language of UI_LANGUAGES) { const locale = await import(`./locales/${language.code}.json`); expect(Object.keys(locale.default).sort()).toEqual(Object.keys(en).sort()); } });
+  it("shows the unauthenticated state after a 401 startup check", async () => {
+    const fetchMock = mockUnauthenticatedFetch();
+    renderApp();
+    expect(await screen.findByText(en.sessionExpired)).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: en.username })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/auth/me", expect.objectContaining({ credentials: "include" }));
+  });
+  it("renders the registration tab and detects a password mismatch", async () => {
+    mockUnauthenticatedFetch(); renderApp();
+    fireEvent.click(await screen.findByRole("tab", { name: en.register }));
+    fireEvent.change(screen.getByRole("textbox", { name: en.username }), { target: { value: "new-user" } });
+    fireEvent.change(screen.getByRole("textbox", { name: en.email }), { target: { value: "new@example.invalid" } });
+    fireEvent.change(screen.getByLabelText(en.password), { target: { value: "register-password" } });
+    fireEvent.change(screen.getByLabelText(en.confirmPassword), { target: { value: "different-password" } });
+    fireEvent.click(screen.getByRole("button", { name: en.registerAccount }));
+    expect((await screen.findByRole("alert")).textContent).toBe(en.passwordsDoNotMatch);
+  });
+  it("registers a user and enters the authenticated application", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ username: "new-user" })); vi.stubGlobal("fetch", fetchMock); renderApp();
+    fireEvent.click(await screen.findByRole("tab", { name: en.register }));
+    fireEvent.change(screen.getByRole("textbox", { name: en.username }), { target: { value: "new-user" } }); fireEvent.change(screen.getByRole("textbox", { name: en.email }), { target: { value: "new@example.invalid" } }); fireEvent.change(screen.getByLabelText(en.password), { target: { value: "register-password" } }); fireEvent.change(screen.getByLabelText(en.confirmPassword), { target: { value: "register-password" } }); fireEvent.click(screen.getByRole("button", { name: en.registerAccount }));
+    expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(fetchMock).toHaveBeenLastCalledWith("http://127.0.0.1:8000/api/auth/register", expect.objectContaining({ method: "POST", credentials: "include" }));
+  });
+  it("shows a localized registration error", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ detail: "Not authenticated" }, false, 401)).mockResolvedValueOnce(response({ detail: "duplicate" }, false, 409)); vi.stubGlobal("fetch", fetchMock); renderApp(); fireEvent.click(await screen.findByRole("tab", { name: en.register })); fireEvent.change(screen.getByRole("textbox", { name: en.username }), { target: { value: "new-user" } }); fireEvent.change(screen.getByRole("textbox", { name: en.email }), { target: { value: "new@example.invalid" } }); fireEvent.change(screen.getByLabelText(en.password), { target: { value: "register-password" } }); fireEvent.change(screen.getByLabelText(en.confirmPassword), { target: { value: "register-password" } }); fireEvent.click(screen.getByRole("button", { name: en.registerAccount })); expect((await screen.findByRole("alert")).textContent).toBe(en.invalidRegistration);
+  });
   it("uploads and automatically displays the complete persisted workflow", async () => {
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ id: "inspection-1", inspection_number: "INSP-001" }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ id: "image-1", original_filename: "label.png" }) }).mockResolvedValueOnce({ ok: true, json: async () => result }));
-    renderApp(); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } });
+    mockAuthenticatedFetch(response({ id: "inspection-1", inspection_number: "INSP-001" }), response({ id: "image-1", original_filename: "label.png" }), response(result));
+    renderApp(); await screen.findByText(en.dashboard); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } });
     await screen.findByText("MRP Rs 100"); expect(screen.getByText("ABC Foods")).toBeTruthy(); expect(screen.getByText("MRP format — PASS (WARNING)")).toBeTruthy(); expect(screen.getByText("Inspection complete")).toBeTruthy();
   });
   it("shows a recoverable failure", async () => {
-    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() }); vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ detail: "Database unavailable." }) }));
-    renderApp(); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } }); expect((await screen.findByRole("alert")).textContent).toContain("500: Database unavailable.");
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() }); mockAuthenticatedFetch(response({ detail: "Database unavailable." }, false, 500));
+    renderApp(); await screen.findByText(en.dashboard); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } }); expect((await screen.findByRole("alert")).textContent).toContain("500: Database unavailable.");
   });
   it("starts a new inspection after completion", async () => {
-    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() }); vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ id: "inspection-1", inspection_number: "INSP-001" }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ id: "image-1" }) }).mockResolvedValueOnce({ ok: true, json: async () => result }));
-    renderApp(); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } }); await screen.findByText("Start New Inspection"); fireEvent.click(screen.getByText("Start New Inspection")); await waitFor(() => expect(screen.queryByText("MRP Rs 100")).toBeNull());
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() }); mockAuthenticatedFetch(response({ id: "inspection-1", inspection_number: "INSP-001" }), response({ id: "image-1" }), response(result));
+    renderApp(); await screen.findByText(en.dashboard); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } }); await screen.findByText("Start New Inspection"); fireEvent.click(screen.getByText("Start New Inspection")); await waitFor(() => expect(screen.queryByText("MRP Rs 100")).toBeNull());
   });
 });

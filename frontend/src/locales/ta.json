@@ -1,4 +1,6 @@
 {
+  "authHeadline": "Smart Package Label Inspection", "authDescription": "LabelGuard helps inspectors review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
+  "login": "உள்நுழை", "username": "பயனர் பெயர்", "password": "கடவுச்சொல்", "signIn": "உள்நுழைக", "signingIn": "உள்நுழைகிறது…", "invalidCredentials": "தவறான பயனர் பெயர் அல்லது கடவுச்சொல்.", "sessionExpired": "அமர்வு முடிவடைந்தது.", "logout": "வெளியேறு", "welcome": "வரவேற்பு", "startNewInspection": "புதிய ஆய்வைத் தொடங்கு", "authenticationLoading": "அங்கீகாரம் சரிபார்க்கப்படுகிறது…", "authenticationError": "அங்கீகாரப் பிழை",
   "appName": "LabelGuard",
   "tagline": "தொகுப்பு-லேபிள் ஆய்வு உதவி",
   "dashboard": "டாஷ்போர்டு",

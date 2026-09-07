@@ -18,9 +18,18 @@ from backend.app.services.extraction import ExtractionService
 from backend.app.services.ocr import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, store_image, validate_image
 from backend.app.services.workflow import InspectionWorkflow, WorkflowError
+from backend.app.api.auth import get_current_user
+from backend.app.models import User
 
-router = APIRouter(prefix="/inspections", tags=["inspections"])
+router = APIRouter(prefix="/inspections", tags=["inspections"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("uvicorn.error")
+
+
+def require_owner(inspection: Inspection | None, user: User) -> Inspection:
+    # A missing owner is legacy data and deliberately remains inaccessible.
+    if inspection is None or inspection.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    return inspection
 
 
 def make_inspection_number() -> str:
@@ -72,13 +81,14 @@ def _ensure_compliance_rules(db: Session) -> dict[str, ComplianceRule]:
 
 
 @router.post("", response_model=InspectionCreated, status_code=status.HTTP_201_CREATED)
-def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db)) -> Inspection:
+def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Inspection:
     inspection = Inspection(
         inspection_number=make_inspection_number(),
         manufacturer_id=payload.manufacturer_id,
         product_id=payload.product_id,
         notes=payload.notes,
         status="CREATED",
+        user_id=user.id,
     )
     db.add(inspection)
     db.commit()
@@ -91,10 +101,9 @@ async def upload_inspection_image(
     inspection_id: UUID,
     image: UploadFile = File(..., description="Package image in JPG, JPEG, or PNG format."),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> InspectionImage:
-    inspection = db.get(Inspection, inspection_id)
-    if inspection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    inspection = require_owner(db.get(Inspection, inspection_id), user)
 
     settings = get_settings()
     content = await image.read(settings.max_upload_bytes + 1)
@@ -115,10 +124,10 @@ async def upload_inspection_image(
 
 
 @router.post("/{inspection_id}/process", response_model=InspectionSummary)
-def process_inspection(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow)) -> InspectionSummary:
+def process_inspection(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow), user: User = Depends(get_current_user)) -> InspectionSummary:
     """Run any unfinished stage once; safe to call again after success or failure."""
     try:
-        return workflow.process(inspection_id)
+        require_owner(workflow.db.get(Inspection, inspection_id), user); return workflow.process(inspection_id)
     except KeyError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except WorkflowError as error:
@@ -126,9 +135,9 @@ def process_inspection(inspection_id: UUID, workflow: InspectionWorkflow = Depen
 
 
 @router.get("/{inspection_id}", response_model=InspectionSummary)
-def get_inspection_summary(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow)) -> InspectionSummary:
+def get_inspection_summary(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow), user: User = Depends(get_current_user)) -> InspectionSummary:
     try:
-        return workflow.summary(inspection_id)
+        require_owner(workflow.db.get(Inspection, inspection_id), user); return workflow.summary(inspection_id)
     except KeyError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
@@ -139,12 +148,11 @@ def process_inspection_image_ocr(
     image_id: UUID,
     db: Session = Depends(get_db),
     ocr_service: PaddleOcrService = Depends(get_ocr_service),
+    user: User = Depends(get_current_user),
 ) -> OcrProcessed:
     started = perf_counter()
     logger.info("OCR route started inspection_id=%s image_id=%s", inspection_id, image_id)
-    inspection = db.get(Inspection, inspection_id)
-    if inspection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    inspection = require_owner(db.get(Inspection, inspection_id), user)
     image = db.get(InspectionImage, image_id)
     if image is None or image.inspection_id != inspection.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection image not found.")
@@ -196,10 +204,9 @@ def extract_inspection_information(
     inspection_id: UUID,
     db: Session = Depends(get_db),
     extraction_service: ExtractionService = Depends(get_extraction_service),
+    user: User = Depends(get_current_user),
 ) -> ExtractionResponse:
-    inspection = db.get(Inspection, inspection_id)
-    if inspection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+    inspection = require_owner(db.get(Inspection, inspection_id), user)
     ocr_result = db.scalar(
         select(OcrResult).where(OcrResult.inspection_id == inspection.id).order_by(OcrResult.created_at.desc())
     )
@@ -227,10 +234,8 @@ def extract_inspection_information(
 
 
 @router.post("/{inspection_id}/compliance", response_model=ComplianceResponse)
-def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db), compliance_engine: ComplianceEngine = Depends(get_compliance_engine)) -> ComplianceResponse:
-    inspection = db.get(Inspection, inspection_id)
-    if inspection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db), compliance_engine: ComplianceEngine = Depends(get_compliance_engine), user: User = Depends(get_current_user)) -> ComplianceResponse:
+    inspection = require_owner(db.get(Inspection, inspection_id), user)
     ocr_result = db.scalar(select(OcrResult).where(OcrResult.inspection_id == inspection.id).order_by(OcrResult.created_at.desc()))
     if ocr_result is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="OCR must be run before compliance analysis.")
@@ -256,9 +261,8 @@ def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db)
 
 
 @router.get("/{inspection_id}/compliance", response_model=ComplianceResponse)
-def get_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db)) -> ComplianceResponse:
-    if db.get(Inspection, inspection_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inspection not found.")
+def get_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> ComplianceResponse:
+    require_owner(db.get(Inspection, inspection_id), user)
     results = db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection_id).join(ComplianceRule).order_by(ComplianceRule.rule_code)).all()
     if not results:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Compliance analysis has not been run.")

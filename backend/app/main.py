@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.health import router as health_router
 from backend.app.api.inspections import router as inspections_router
+from backend.app.api.auth import router as auth_router
 from backend.app.core.config import get_settings
 
 settings = get_settings()
@@ -22,4 +23,5 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 app.include_router(inspections_router, prefix="/api")

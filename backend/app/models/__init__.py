@@ -2,6 +2,7 @@
 
 from backend.app.models.base import Base
 from backend.app.models.entities import (
+    AuthSession,
     ComplianceResult,
     ComplianceRule,
     ExtractedField,
@@ -18,7 +19,7 @@ from backend.app.models.entities import (
 )
 
 __all__ = [
-    "Base", "ComplianceResult", "ComplianceRule", "ExtractedField", "Inspection",
+    "Base", "AuthSession", "ComplianceResult", "ComplianceRule", "ExtractedField", "Inspection",
     "InspectionImage", "InspectionIssue", "Manufacturer", "ManufacturerHistory",
     "OcrResult", "Product", "RiskScore", "SyncRecord", "User",
 ]

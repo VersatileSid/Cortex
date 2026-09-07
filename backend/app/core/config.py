@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # important for dense package labels on the Windows CPU runtime.
     ocr_recognition_batch_size: int = 8
     ocr_languages: str = "en,hi,gom,mai,mr,ne,sa,ta,te,ur,ka"
+    session_cookie_name: str = "labelguard_session"
+    session_ttl_hours: int = 12
+    session_secure: bool = False
 
     model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
