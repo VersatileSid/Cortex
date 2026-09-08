@@ -9,7 +9,7 @@ function renderApp() { return render(<I18nProvider><App /></I18nProvider>); }
 const file = () => new File(["image"], "label.png", { type: "image/png" });
 const result = { id: "inspection-1", inspection_number: "INSP-001", status: "COMPLETED", image: { id: "image-1", original_filename: "label.png" }, ocr: { raw_text: "MRP Rs 100", languages: ["en", "hi"], results: [] }, extraction: { fields: { manufacturer: { value: "ABC Foods", confidence: .94, needs_review: false }, mrp: { value: "Rs 100", confidence: .97, needs_review: false } } }, compliance: { overall_status: "REVIEW", summary: { passed: 1, failed: 0, review: 1 }, findings: [{ rule_id: "MRP_FORMAT", rule_name: "MRP format", status: "PASS", severity: "WARNING", message: "Valid MRP", field: "mrp", value: "Rs 100" }] } };
 const authenticatedUser = { username: "inspector" };
-const response = (body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body });
+const response = (body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body, blob: async () => new Blob(["%PDF-test"], { type: "application/pdf" }) });
 
 function mockAuthenticatedFetch(...responses: ReturnType<typeof response>[]) {
   const fetchMock = vi.fn().mockResolvedValueOnce(response(authenticatedUser));
@@ -66,6 +66,12 @@ describe("inspection workflow UI", () => {
     mockAuthenticatedFetch(response({ id: "inspection-1", inspection_number: "INSP-001" }), response({ id: "image-1", original_filename: "label.png" }), response(result));
     renderApp(); await screen.findByText(en.dashboard); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } });
     await screen.findByText("MRP Rs 100"); expect(screen.getByText("ABC Foods")).toBeTruthy(); expect(screen.getByText("MRP format — PASS (WARNING)")).toBeTruthy(); expect(screen.getByText("Inspection complete")).toBeTruthy();
+  });
+  it("downloads an authorized PDF report through the shared credentialed API helper", async () => {
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:report"), revokeObjectURL: vi.fn() }); const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const fetchMock = mockAuthenticatedFetch(response({ id: "inspection-1", inspection_number: "INSP-001" }), response({ id: "image-1", original_filename: "label.png" }), response(result), response({}));
+    renderApp(); await screen.findByText(en.dashboard); fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file()] } }); await screen.findByText(en.downloadPdfReport); fireEvent.click(screen.getByRole("button", { name: en.downloadPdfReport }));
+    await waitFor(() => expect(click).toHaveBeenCalled()); expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:8000/api/inspections/inspection-1/report", expect.objectContaining({ credentials: "include" })); click.mockRestore();
   });
   it("shows a recoverable failure", async () => {
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:label"), revokeObjectURL: vi.fn() }); mockAuthenticatedFetch(response({ detail: "Database unavailable." }, false, 500));

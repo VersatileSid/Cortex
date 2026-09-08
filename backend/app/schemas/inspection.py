@@ -36,6 +36,20 @@ class InspectionHistoryPage(BaseModel):
     total_pages: int
 
 
+class PatternResponse(BaseModel):
+    pattern_key: str
+    pattern_type: str
+    title: str
+    description: str
+    occurrence_count: int
+    first_seen: datetime
+    last_seen: datetime
+    severity: str
+    inspection_ids: list[UUID]
+    affected_field: str | None = None
+    rule_code: str | None = None
+
+
 class ImageUploaded(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,6 +109,8 @@ class ComplianceFindingResponse(BaseModel):
     value: str | None = None
     confidence: float | None = None
     evidence: str | None = None
+    category: str = "LEGAL_METROLOGY"
+    expected: str | None = None
 
 
 class ComplianceResponse(BaseModel):

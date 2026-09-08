@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     session_cookie_name: str = "labelguard_session"
     session_ttl_hours: int = 12
     session_secure: bool = False
+    pattern_min_occurrences: int = 2
 
     model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 

@@ -20,6 +20,7 @@ dependencies = [
   "paddleocr>=3.0,<4.0",
   "paddlepaddle>=3.0,<4.0",
   "cryptography>=43,<46",
+  "reportlab>=4.2,<5.0",
 ]
 
 [project.optional-dependencies]

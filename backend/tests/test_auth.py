@@ -111,7 +111,7 @@ def test_valid_login_establishes_session_and_me_returns_user(authenticated_clien
     assert response.status_code == 200
     assert response.json() == {
         "id": str(test_user.id), "username": test_user.username,
-        "email": test_user.email, "is_active": True,
+        "email": test_user.email, "is_active": True, "role": "OFFICIAL", "full_name": test_user.full_name, "organization": None,
     }
     assert authenticated_session.token_hash != authenticated_client.cookies[get_settings().session_cookie_name]
 
@@ -162,6 +162,28 @@ def test_authenticated_inspection_creation_records_the_current_user(authenticate
 def test_owner_can_access_own_inspection(authenticated_client) -> None:
     inspection = authenticated_client.post("/api/inspections", json={}).json()
     assert authenticated_client.get(f"/api/inspections/{inspection['id']}").status_code == 200
+
+
+def test_pdf_report_requires_authentication_and_enforces_ownership(
+    authenticated_client, second_authenticated_client, owned_inspection,
+) -> None:
+    inspection_id = owned_inspection["id"]
+    with TestClient(app) as unauthenticated_client:
+        assert unauthenticated_client.get(f"/api/inspections/{inspection_id}/report").status_code == 401
+    assert second_authenticated_client.get(f"/api/inspections/{inspection_id}/report").status_code == 404
+
+
+def test_owner_can_download_a_valid_pdf_report_with_persisted_data(authenticated_client, auth_database, test_user) -> None:
+    with auth_database() as db:
+        inspection = Inspection(inspection_number="LG-REPORT-PERSISTED", user_id=test_user.id, status="COMPLETED")
+        db.add(inspection); db.commit(); db.refresh(inspection)
+    response = authenticated_client.get(f"/api/inspections/{inspection.id}/report")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.content.startswith(b"%PDF")
+    assert "attachment; filename=\"inspection_" in response.headers["content-disposition"]
+    # PDF metadata streams retain this persisted inspection identifier.
+    assert b"LG-REPORT-PERSISTED" in response.content
 
 
 def test_history_is_paginated_newest_first_and_never_leaks_other_users(
@@ -221,7 +243,7 @@ def test_auth_endpoints_do_not_expose_sensitive_authentication_data(authenticate
     for response in (login_response, me_response):
         assert response.status_code == 200
         payload = response.json()
-        assert set(payload) == {"id", "username", "email", "is_active"}
+        assert set(payload) == {"id", "username", "email", "is_active", "role", "full_name", "organization"}
         serialized = str(payload).lower()
         assert "password" not in serialized
         assert "hash" not in serialized
@@ -233,12 +255,28 @@ def test_registration_creates_a_hashed_user_and_authenticated_session(auth_clien
     password = "register-password"
     response = auth_client.post("/api/auth/register", json={"username": "registered-user", "email": "registered@example.invalid", "password": password})
     assert response.status_code == 201
-    assert set(response.json()) == {"id", "username", "email", "is_active"}
+    assert set(response.json()) == {"id", "username", "email", "is_active", "role", "full_name", "organization"}
     assert password not in str(response.json())
     with auth_database() as db:
         user = db.scalar(select(User).where(User.username == "registered-user"))
         assert user and user.password_hash.startswith("scrypt$") and password not in user.password_hash
     assert auth_client.get("/api/auth/me").json()["username"] == "registered-user"
+
+
+def test_role_registration_me_and_server_side_authorization(auth_client) -> None:
+    official = {"username": "official-role", "email": "official-role@example.invalid", "password": "register-password", "role": "OFFICIAL", "full_name": "Official User", "organization": "Label Office"}
+    response = auth_client.post("/api/auth/register", json=official)
+    assert response.status_code == 201 and response.json()["role"] == "OFFICIAL"
+    assert auth_client.get("/api/auth/me").json()["role"] == "OFFICIAL"
+    assert auth_client.get("/api/roles/official").status_code == 200
+    assert auth_client.get("/api/roles/manufacturer").status_code == 403
+    assert auth_client.post("/api/auth/logout").status_code == 204
+    manufacturer = {"username": "manufacturer-role", "email": "manufacturer-role@example.invalid", "password": "register-password", "role": "MANUFACTURER", "company_name": "Safe Foods Ltd"}
+    response = auth_client.post("/api/auth/register", json=manufacturer)
+    assert response.status_code == 201 and response.json()["role"] == "MANUFACTURER"
+    assert auth_client.get("/api/auth/me").json()["role"] == "MANUFACTURER"
+    assert auth_client.get("/api/roles/manufacturer").status_code == 200
+    assert auth_client.get("/api/roles/official").status_code == 403
 
 
 def test_registration_rejects_duplicate_username_and_email(auth_client, test_user) -> None:

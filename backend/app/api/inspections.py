@@ -4,7 +4,7 @@ import logging
 from time import perf_counter
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from backend.app.services.extraction import ExtractionService
 from backend.app.services.ocr import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, store_image, validate_image
 from backend.app.services.workflow import InspectionWorkflow, WorkflowError
+from backend.app.services.report import InspectionReportService
 from backend.app.api.auth import get_current_user
 from backend.app.models import User
 
@@ -63,7 +64,7 @@ def get_workflow(db: Session = Depends(get_db), ocr_service: PaddleOcrService = 
 
 
 def _compliance_response(inspection_id: UUID, results: list[ComplianceResult]) -> ComplianceResponse:
-    findings = [ComplianceFindingResponse(rule_id=result.rule.rule_code, rule_name=result.rule.description.split(".", 1)[0], status=result.result, severity=result.rule.severity, message=result.explanation, field=result.field_name, value=result.value, confidence=float(result.confidence) if result.confidence is not None else None, evidence=result.evidence) for result in results]
+    findings = [ComplianceFindingResponse(rule_id=result.rule.rule_code, rule_name=result.rule.description.split(".", 1)[0], status=result.result, severity=result.rule.severity, message=result.explanation, field=result.field_name, value=result.value, confidence=float(result.confidence) if result.confidence is not None else None, evidence=result.evidence, expected=result.rule.description) for result in results]
     counts = {name: sum(finding.status == name for finding in findings) for name in ("PASS", "FAIL", "REVIEW")}
     overall = "FAIL" if counts["FAIL"] else "REVIEW" if counts["REVIEW"] else "PASS"
     return ComplianceResponse(inspection_id=inspection_id, overall_status=overall, summary=ComplianceSummary(passed=counts["PASS"], failed=counts["FAIL"], review=counts["REVIEW"]), findings=findings)
@@ -124,6 +125,23 @@ def list_inspections(
     total = db.scalar(count_query) or 0
     rows = db.execute(query.order_by(Inspection.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return InspectionHistoryPage(items=[InspectionHistoryItem(id=i.id, inspection_number=i.inspection_number, status=i.status, created_at=i.created_at, updated_at=i.updated_at, product_name=name, image_filename=image, compliance_status=compliance) for i, name, image, compliance in rows], page=page, page_size=page_size, total=total, total_pages=(total + page_size - 1) // page_size)
+
+
+@router.get("/{inspection_id}/report", response_class=Response, responses={200: {"content": {"application/pdf": {}}}})
+def download_inspection_report(
+    inspection_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Generate an authorized inspection report without persisting a file."""
+    inspection = require_owner(db.get(Inspection, inspection_id), user)
+    try:
+        report = InspectionReportService(db, get_settings().upload_dir).generate(inspection)
+    except Exception as error:
+        logger.exception("PDF report generation failed inspection_id=%s", inspection_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to generate inspection report.") from error
+    filename = f"inspection_{inspection.id}.pdf"
+    return Response(content=report, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("/{inspection_id}/image", response_model=ImageUploaded, status_code=status.HTTP_201_CREATED)

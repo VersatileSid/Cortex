@@ -18,6 +18,8 @@ from backend.app.models import AuthSession, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+ROLES = frozenset({"OFFICIAL", "MANUFACTURER"})
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=1024)
@@ -25,9 +27,13 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=8, max_length=1024)
+    role: str = Field(default="OFFICIAL")
+    full_name: str | None = Field(default=None, max_length=200)
+    company_name: str | None = Field(default=None, max_length=200)
+    organization: str | None = Field(default=None, max_length=200)
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: str; username: str; email: str; is_active: bool
+    id: str; username: str; email: str; is_active: bool; role: str; full_name: str; organization: str | None = None
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
     salt = salt or os.urandom(16)
@@ -40,7 +46,7 @@ def verify_password(password: str, encoded: str | None) -> bool:
     except (ValueError, TypeError): return False
 def token_hash(token: str) -> str: return hashlib.sha256(token.encode()).hexdigest()
 def safe_user(user: User) -> UserResponse:
-    return UserResponse(id=str(user.id), username=user.username or user.email, email=user.email, is_active=user.is_active)
+    return UserResponse(id=str(user.id), username=user.username or user.email, email=user.email, is_active=user.is_active, role=user.role, full_name=user.full_name, organization=user.organization)
 def establish_session(user: User, response: Response, db: Session) -> None:
     token = secrets.token_urlsafe(32); settings = get_settings()
     db.add(AuthSession(token_hash=token_hash(token), user_id=user.id, expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.session_ttl_hours))); db.commit()
@@ -60,7 +66,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 @router.post("/login", response_model=UserResponse)
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> UserResponse:
-    user = db.scalar(select(User).where(User.username == payload.username))
+    user = db.scalar(select(User).where((User.username == payload.username) | (User.email == payload.username)))
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
     establish_session(user, response, db)
@@ -71,7 +77,11 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
         raise HTTPException(status_code=422, detail="Enter a valid email address.")
     if db.scalar(select(User).where((User.username == payload.username) | (User.email == payload.email))):
         raise HTTPException(status_code=409, detail="An account with those details already exists.")
-    user = User(email=payload.email, username=payload.username, full_name=payload.username, password_hash=hash_password(payload.password), is_active=True)
+    role = payload.role.upper()
+    if role not in ROLES: raise HTTPException(status_code=422, detail="Choose a valid account role.")
+    name = (payload.company_name if role == "MANUFACTURER" else payload.full_name) or payload.username
+    if len(name.strip()) < 2: raise HTTPException(status_code=422, detail="Provide the required account name.")
+    user = User(email=payload.email, username=payload.username, full_name=name.strip(), organization=(payload.organization or None), role=role, password_hash=hash_password(payload.password), is_active=True)
     try:
         db.add(user); db.commit(); db.refresh(user)
     except IntegrityError as error:
@@ -81,6 +91,15 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
     return safe_user(user)
 @router.get("/me", response_model=UserResponse)
 def me(user: User = Depends(get_current_user)) -> UserResponse: return safe_user(user)
+
+def require_role(role: str):
+    def dependency(user: User = Depends(get_current_user)) -> User:
+        if user.role != role: raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized.")
+        return user
+    return dependency
+
+require_official = require_role("OFFICIAL")
+require_manufacturer = require_role("MANUFACTURER")
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> Response:
     name = get_settings().session_cookie_name; token = request.cookies.get(name)

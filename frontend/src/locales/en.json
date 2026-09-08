@@ -1,4 +1,5 @@
 {
+  "downloadPdfReport": "Download PDF Report", "generatingPdf": "Generating PDF…", "reportGenerationError": "Unable to generate report. Please try again.", "reportGenerated": "Report generated", "report": "Report", "pdf": "PDF",
   "authHeadline": "Smarter Package Label Inspection", "authDescription": "LabelGuard gives inspectors a clear, reliable way to review package labels.", "authFeatureAi": "AI-assisted label analysis", "authFeatureOcr": "OCR in English and Hindi", "authFeatureCompliance": "Compliance-focused inspection workflow", "register": "Register", "createAccount": "Create your account", "email": "Email", "confirmPassword": "Confirm password", "showPassword": "Show password", "hidePassword": "Hide password", "registerAccount": "Create account", "registering": "Creating account…", "passwordsDoNotMatch": "Passwords do not match.", "invalidRegistration": "Please check the details and try again.", "registrationError": "We could not create your account. Please try again.",
   "login": "Login", "username": "Username", "password": "Password", "signIn": "Sign in", "signingIn": "Signing in…", "invalidCredentials": "Invalid username or password.", "sessionExpired": "Your session has expired. Please sign in again.", "logout": "Logout", "welcome": "Welcome", "startNewInspection": "Start New Inspection", "authenticationLoading": "Checking authentication…", "authenticationError": "Authentication error",
   "appName": "LabelGuard",
@@ -111,4 +112,4 @@
   "complianceResult": "Compliance",
   "imageFilename": "Image file",
   "returnToHistory": "Back to inspection history"
-}
+,"patterns":"Patterns","repeatedIssues":"Repeated issues","detectedPatterns":"Detected patterns","occurrences":"Occurrences","firstSeen":"First seen","lastSeen":"Last seen","severity":"Severity","high":"High","medium":"Medium","low":"Low","complianceViolation":"Compliance violation","complianceWarning":"Compliance warning","missingField":"Missing field","noRepeatedPatterns":"No repeated patterns detected yet.","patternsEmptyDescription":"Continue completing inspections to build historical pattern data.","patternsLoadError":"Unable to load patterns.","patternDetails":"Pattern details","affectedInspections":"Affected inspections"}

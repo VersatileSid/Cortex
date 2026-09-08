@@ -15,7 +15,8 @@ class User(IdTimestampMixin, Base):
     username: Mapped[str | None] = mapped_column(String(100), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(50), default="inspector", nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="OFFICIAL", nullable=False)
+    organization: Mapped[str | None] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
