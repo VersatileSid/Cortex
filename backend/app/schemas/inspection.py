@@ -122,6 +122,19 @@ class ComplianceResponse(BaseModel):
     findings: list[ComplianceFindingResponse]
 
 
+class QuantityVerificationResponse(BaseModel):
+    """Declared-label quantity only; no physical measurement is implied."""
+    declared_quantity: str | None = None
+    normalized_quantity: str | None = None
+    unit: str | None = None
+    status: str
+    reason: str
+    rule_code: str
+    severity: str
+    evidence: str | None = None
+    requirement: str | None = None
+
+
 class InspectionSummary(BaseModel):
     """The persisted, user-facing state of an inspection workflow."""
     id: UUID
@@ -136,6 +149,7 @@ class InspectionSummary(BaseModel):
     ocr: OcrProcessed | None = None
     extraction: ExtractionResponse | None = None
     compliance: ComplianceResponse | None = None
+    quantity_verification: QuantityVerificationResponse | None = None
     risk: RiskAssessmentResponse | None = None
 
 

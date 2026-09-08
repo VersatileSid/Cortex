@@ -61,6 +61,12 @@ Risk-Based Targeting is a transparent, deterministic prioritisation aid for comp
 
 Scores are capped at 100: 0–24 LOW, 25–49 MEDIUM, 50–74 HIGH, and 75–100 CRITICAL. A FAIL contributes 35/25/15/10 points for HIGH/WARNING/INFO/LOW severity; a REVIEW contributes 20/12/6/4. Each absent extracted field contributes 6 points (maximum 18). A repeated non-pass rule adds 12, a repeated missing field adds 8, and three or more distinct non-pass rules add 8. Repeat evidence is calculated only within the authenticated owner's completed inspections. `GET /api/risk-targeting` is official-only, paginated, and intentionally excludes OCR/image blobs.
 
+## Declared Quantity Verification (Milestone 14)
+
+Quantity verification reuses the existing OCR, extraction, and `NET_QUANTITY_FORMAT` compliance rule. It verifies only the **declared quantity on the label**; it does not weigh a product or claim that the actual physical contents were measured. The inspection result and PDF show the declared quantity separately from a safe normalized representation, its evidence, and the authoritative compliance result.
+
+Supported declaration formats include common mass and volume units (`mg`, `g`, `kg`, `ml`, `L`, `cm3`/`cc`) and count declarations (`N`, `nos`, `pcs`). Harmless spacing, capitalization, and common OCR character variants are normalized for validation while the declared display value is retained. Missing, unsupported, or ambiguous declarations continue through the existing compliance, risk, and repeat-pattern mechanisms using the stable quantity rule; no new legal requirement or risk weight is invented. Physical weighing can be added later only with a real measurement integration.
+
 ## Run locally
 
 Start PostgreSQL with `docker compose up db -d`, then in separate terminals run:

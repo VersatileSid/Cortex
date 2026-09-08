@@ -92,12 +92,13 @@ def test_reextract_invalidates_stale_compliance_findings() -> None:
             session.commit()
         response = client.post(f"/api/inspections/{inspection['id']}/extract")
         assert response.status_code == 200
-        assert response.json()["fields"]["net_quantity"]["value"] == "500 g"
+        assert response.json()["fields"]["net_quantity"]["value"] == "0.5 KG"
+        assert response.json()["fields"]["net_quantity"]["normalized_value"] == "500 g"
         with sessions() as session:
             assert session.query(ComplianceResult).filter_by(inspection_id=UUID(inspection["id"])).count() == 0
         fresh = client.post(f"/api/inspections/{inspection['id']}/compliance").json()
         quantity = next(finding for finding in fresh["findings"] if finding["rule_id"] == "NET_QUANTITY_FORMAT")
-        assert quantity["status"] == "PASS" and quantity["value"] == "500 g"
+        assert quantity["status"] == "PASS" and quantity["value"] == "0.5 KG"
     finally:
         app.dependency_overrides.clear()
         engine.dispose()

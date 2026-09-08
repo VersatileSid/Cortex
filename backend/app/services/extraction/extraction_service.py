@@ -34,7 +34,7 @@ class ExtractionService:
 
     _date = r"(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{1,2}[/.\-]\d{4})"
     _money = r"(?:₹|rs\.?|inr)\s*([0-9][0-9,.]*)"
-    _quantity = r"([0-9OoIl]+(?:[.,][0-9OoIl]+)?)\s*(m\s*l|mgs?|milligrams?|g(?:rams?)?|gms?|k(?:ilo)?grams?|kgs?|millilit(?:re|er)s?|ml|centilit(?:re|er)s?|cl|l(?:it(?:re|er)s?)?|ltr)\b"
+    _quantity = r"([0-9OoIl]+(?:[.,][0-9OoIl]+)?)\s*(m\s*l|mgs?|milligrams?|g(?:rams?)?|gms?|k(?:ilo)?grams?|kgs?|millilit(?:re|er)s?|cm(?:\^?3|³)|cc|ml|centilit(?:re|er)s?|cl|l(?:it(?:re|er)s?)?|ltr|n|nos?\.?|units?|pcs?\.?|pieces?)\b"
     _roles = {
         "manufacturer": r"(?:manufacturer|manufactured?\s*(?:by)?|mfg\.?\s*by|mfd\.?\s*by|निर्माता|निर्मित\s*द्वारा)",
         "packer": r"(?:packed?\s*(?:by|for)?|pkd\.?\s*by|packer|पैक\s*किया\s*गया|पैकर)",
@@ -111,10 +111,11 @@ class ExtractionService:
         for line in lines:
             match = re.search(rf"(?i)(?:net\s*(?:quantity|qty|weight)|contents|शुद्ध\s*मात्रा)\s*[:\-]?\s*{self._quantity}", line)
             if match:
-                normalized = ComplianceEngine.normalize_quantity(f"{match.group(1)} {match.group(2)}")
+                declared = f"{match.group(1)} {match.group(2)}"
+                normalized = ComplianceEngine.normalize_quantity(declared)
                 if normalized:
-                    logger.debug("Extraction field=net_quantity raw_ocr=%r parsed=%r normalized=%r", line, f"{match.group(1)} {match.group(2)}", normalized)
-                    candidates.append((normalized, line, 0.96))
+                    logger.debug("Extraction field=net_quantity raw_ocr=%r parsed=%r normalized=%r", line, declared, normalized)
+                    candidates.append((declared, line, 0.96))
         return candidates
 
     def _dates(self, lines: list[str]) -> dict[str, ExtractedValue]:
@@ -167,4 +168,5 @@ class ExtractionService:
         values = list(dict.fromkeys(candidate[0] for candidate in candidates))
         value, source, confidence = candidates[0]
         ambiguous = len(values) > 1
-        return ExtractedValue(value, confidence - (0.25 if ambiguous else 0), ambiguous, source, pattern, value)
+        normalized = ComplianceEngine.normalize_quantity(value) if pattern == "quantity" else value
+        return ExtractedValue(value, confidence - (0.25 if ambiguous else 0), ambiguous, source, pattern, normalized)

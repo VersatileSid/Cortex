@@ -11,9 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult
-from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionSummary, OcrProcessed
+from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionSummary, OcrProcessed, QuantityVerificationResponse
 from backend.app.services.compliance.rule_engine import ComplianceEngine, FieldEvidence, RULES
 from backend.app.services.extraction.extraction_service import ExtractionService
+from backend.app.services.quantity_verification import QuantityVerificationService
 from backend.app.services.ocr.ocr_service import OcrInitializationError, OcrProcessingError, PaddleOcrService
 from backend.app.services.uploads import UploadValidationError, validate_image
 
@@ -128,4 +129,14 @@ class InspectionWorkflow:
         findings = [ComplianceFindingResponse(rule_id=result.rule.rule_code, rule_name=result.rule.description.split(".", 1)[0], status=result.result, severity=result.rule.severity, message=result.explanation, field=result.field_name, value=result.value, confidence=float(result.confidence) if result.confidence is not None else None, evidence=result.evidence, expected=result.rule.description) for result in results]
         counts = {value: sum(f.status == value for f in findings) for value in ("PASS", "FAIL", "REVIEW")}
         compliance_response = ComplianceResponse(inspection_id=inspection.id, overall_status="FAIL" if counts["FAIL"] else "REVIEW" if counts["REVIEW"] else "PASS", summary=ComplianceSummary(passed=counts["PASS"], failed=counts["FAIL"], review=counts["REVIEW"]), findings=findings) if results else None
-        return InspectionSummary(id=inspection.id, inspection_number=inspection.inspection_number, status=inspection.status, created_at=inspection.created_at, updated_at=inspection.updated_at, completed_at=inspection.completed_at, failure_stage=inspection.failure_stage, failure_message=inspection.failure_message, image=ImageUploaded.model_validate(image) if image else None, ocr=ocr_response, extraction=extraction_response, compliance=compliance_response)
+        quantity_field = next((field for field in extracted if field.field_name == "net_quantity"), None)
+        quantity_result = next((result for result in results if result.rule.rule_code == "NET_QUANTITY_FORMAT"), None)
+        quantity = QuantityVerificationService().verify(
+            quantity_field.value if quantity_field else None,
+            status=quantity_result.result if quantity_result else None,
+            reason=quantity_result.explanation if quantity_result else None,
+            severity=quantity_result.rule.severity if quantity_result else None,
+            evidence=quantity_result.evidence if quantity_result else (quantity_field.value if quantity_field else None),
+            requirement=quantity_result.rule.description if quantity_result else None,
+        ) if quantity_field or quantity_result else None
+        return InspectionSummary(id=inspection.id, inspection_number=inspection.inspection_number, status=inspection.status, created_at=inspection.created_at, updated_at=inspection.updated_at, completed_at=inspection.completed_at, failure_stage=inspection.failure_stage, failure_message=inspection.failure_message, image=ImageUploaded.model_validate(image) if image else None, ocr=ocr_response, extraction=extraction_response, compliance=compliance_response, quantity_verification=QuantityVerificationResponse(**quantity.__dict__) if quantity else None)

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, Manufacturer, Product
 from backend.app.services.risk import RiskService
+from backend.app.services.quantity_verification import QuantityVerificationService
 
 SEVERITY_RANK = {"CRITICAL": 5, "HIGH": 4, "WARNING": 3, "MEDIUM": 3, "INFO": 2, "LOW": 1}
 
@@ -37,11 +38,19 @@ class InspectionReportService:
         fields = self.db.scalars(select(ExtractedField).where(ExtractedField.inspection_id == inspection.id).order_by(ExtractedField.field_name)).all(); findings = self.db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id).join(ComplianceRule).order_by(ComplianceRule.rule_code)).all()
         values = {field.field_name: field.value for field in fields if field.value not in (None, "")}; counts = {state: sum(row.result == state for row in findings) for state in ("PASS", "REVIEW", "FAIL")}; overall = "FAIL" if counts["FAIL"] else "WARNING" if counts["REVIEW"] else "PASS" if findings else "Not available"; risk = RiskService(self.db).for_inspection(inspection) if inspection.status == "COMPLETED" else None
         issues = sorted((row for row in findings if row.result in {"FAIL", "REVIEW"}), key=lambda row: (-SEVERITY_RANK.get(row.rule.severity, 0), row.rule.rule_code))
+        quantity_result = next((row for row in findings if row.rule.rule_code == "NET_QUANTITY_FORMAT"), None)
+        quantity = QuantityVerificationService().verify(values.get("net_quantity"), status=quantity_result.result if quantity_result else None, reason=quantity_result.explanation if quantity_result else None, severity=quantity_result.rule.severity if quantity_result else None, evidence=quantity_result.evidence if quantity_result else values.get("net_quantity"), requirement=quantity_result.rule.description if quantity_result else None)
         output = BytesIO(); document = SimpleDocTemplate(output, pagesize=A4, rightMargin=1.7 * cm, leftMargin=1.7 * cm, topMargin=1.5 * cm, bottomMargin=1.7 * cm, title=f"LabelGuard inspection {inspection.inspection_number}"); document.inspection_number = inspection.inspection_number
         styles = getSampleStyleSheet(); styles.add(ParagraphStyle(name="titleLG", parent=styles["Title"], alignment=TA_CENTER, textColor=colors.HexColor("#087F70"), fontSize=19, leading=23)); styles.add(ParagraphStyle(name="section", parent=styles["Heading2"], textColor=colors.HexColor("#087F70"), fontSize=13, leading=16)); styles.add(ParagraphStyle(name="body", parent=styles["BodyText"], fontSize=8.7, leading=11.5, wordWrap="CJK")); styles.add(ParagraphStyle(name="positive", parent=styles["BodyText"], textColor=colors.HexColor("#09685D"), fontSize=10, leading=13))
         story = [Paragraph("LABELGUARD", styles["titleLG"]), Paragraph("Legal Metrology Inspection Report", styles["Heading2"]), Spacer(1, .22 * cm)]
         story += self._heading("Inspection Summary", styles); story.append(self._table([("Inspection ID", inspection.inspection_number), ("Date / time", inspection.completed_at or inspection.inspected_at), ("Product", values.get("product_name") or (product.name if product else None)), ("Manufacturer / company", values.get("manufacturer") or (manufacturer.name if manufacturer else None)), ("Overall compliance", overall), ("Risk score", f"{risk.risk_score} / 100" if risk else None), ("Risk level", risk.risk_level if risk else None)], styles))
         story += self._heading("Important Issues", styles); story.extend(self._issue_card(row, styles) for row in issues) if issues else story.append(Paragraph("<b>No compliance issues detected.</b> Persisted compliance findings contain no FAIL or REVIEW result.", styles["positive"]))
+        story += self._heading("Quantity Verification", styles)
+        quantity_rows = [("Verification", "Declared quantity verification — no physical measurement"), ("Declared quantity", quantity.declared_quantity), ("Normalized quantity", quantity.normalized_quantity), ("Status", f"{quantity.status} / {quantity.severity}"), ("Finding", quantity.reason), ("Rule", quantity.rule_code), ("Requirement", quantity.requirement), ("Evidence", quantity.evidence)]
+        quantity_table = self._table(quantity_rows, styles)
+        if quantity.status in {"FAIL", "REVIEW"}:
+            quantity_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF4F4")), ("BOX", (0, 0), (-1, -1), .6, colors.HexColor("#E5A3A3"))]))
+        story.append(quantity_table)
         story += self._heading("Legal Metrology Compliance", styles)
         if findings:
             rows = [[Paragraph("<b>Rule code / rule</b>", styles["body"]), Paragraph("<b>Status</b>", styles["body"]), Paragraph("<b>Severity</b>", styles["body"])]] + [[Paragraph(self._text(f"{row.rule.rule_code} - {row.rule.description.split('.', 1)[0]}"), styles["body"]), Paragraph(self._text(row.result), styles["body"]), Paragraph(self._text(row.rule.severity), styles["body"])] for row in sorted(findings, key=lambda item: (-SEVERITY_RANK.get(item.rule.severity, 0), item.rule.rule_code))]

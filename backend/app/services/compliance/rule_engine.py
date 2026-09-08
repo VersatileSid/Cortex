@@ -27,12 +27,12 @@ class ComplianceEngine:
         if not value: return None
         value = cls.clean(value).lower().replace("ℓ", "l").replace("㎖", "ml")
         value = re.sub(r"\bm\s*l\b", "ml", value)
-        match = re.fullmatch(r"([0-9oil]+(?:[,.][0-9oil]+)?)\s*(mgs?|milligrams?|g(?:rams?)?|gms?|k(?:ilo)?grams?|kgs?|millilit(?:re|er)s?|ml|centilit(?:re|er)s?|cl|l(?:it(?:re|er)s?)?|ltr)", value)
+        match = re.fullmatch(r"([0-9oil]+(?:[,.][0-9oil]+)?)\s*(mgs?|milligrams?|g(?:rams?)?|gms?|k(?:ilo)?grams?|kgs?|millilit(?:re|er)s?|ml|centilit(?:re|er)s?|cm(?:\^?3|³)|cc|cl|l(?:it(?:re|er)s?)?|ltr|n|nos?\.?|units?|pcs?\.?|pieces?)", value)
         if not match: return None
         try: amount = Decimal(match.group(1).translate(str.maketrans({"o":"0", "i":"1", "l":"1", ",":"."})))
         except InvalidOperation: return None
         if amount <= 0: return None
-        unit = {"mg":"mg", "mgs":"mg", "milligram":"mg", "milligrams":"mg", "g":"g", "gm":"g", "gms":"g", "gram":"g", "grams":"g", "kg":"kg", "kgs":"kg", "kilogram":"kg", "kilograms":"kg", "ml":"ml", "millilitre":"ml", "millilitres":"ml", "milliliter":"ml", "milliliters":"ml", "cl":"cl", "centilitre":"cl", "centilitres":"cl", "centiliter":"cl", "centiliters":"cl", "l":"l", "ltr":"l", "litre":"l", "liter":"l", "litres":"l", "liters":"l"}.get(match.group(2))
+        unit = {"mg":"mg", "mgs":"mg", "milligram":"mg", "milligrams":"mg", "g":"g", "gm":"g", "gms":"g", "gram":"g", "grams":"g", "kg":"kg", "kgs":"kg", "kilogram":"kg", "kilograms":"kg", "ml":"ml", "millilitre":"ml", "millilitres":"ml", "milliliter":"ml", "milliliters":"ml", "cc":"ml", "cm3":"ml", "cm^3":"ml", "cm³":"ml", "cl":"cl", "centilitre":"cl", "centilitres":"cl", "centiliter":"cl", "centiliters":"cl", "l":"l", "ltr":"l", "litre":"l", "liter":"l", "litres":"l", "liters":"l", "n":"count", "no":"count", "nos":"count", "unit":"count", "units":"count", "pc":"count", "pcs":"count", "piece":"count", "pieces":"count"}.get(match.group(2).rstrip("."))
         if not unit: return None
         if unit == "kg": amount, unit = amount * 1000, "g"
         elif unit == "l": amount, unit = amount * 1000, "ml"
