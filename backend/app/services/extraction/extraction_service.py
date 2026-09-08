@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+
+from backend.app.services.compliance.rule_engine import ComplianceEngine
+
+logger = logging.getLogger(__name__)
 
 
 FIELD_NAMES = (
@@ -29,7 +34,7 @@ class ExtractionService:
 
     _date = r"(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{1,2}[/.\-]\d{4})"
     _money = r"(?:₹|rs\.?|inr)\s*([0-9][0-9,.]*)"
-    _quantity = r"([0-9]+(?:[.,][0-9]+)?)\s*(mg|kg|g|ml|cl|l)\b"
+    _quantity = r"([0-9OoIl]+(?:[.,][0-9OoIl]+)?)\s*(m\s*l|mgs?|milligrams?|g(?:rams?)?|gms?|k(?:ilo)?grams?|kgs?|millilit(?:re|er)s?|ml|centilit(?:re|er)s?|cl|l(?:it(?:re|er)s?)?|ltr)\b"
     _roles = {
         "manufacturer": r"(?:manufacturer|manufactured?\s*(?:by)?|mfg\.?\s*by|mfd\.?\s*by|निर्माता|निर्मित\s*द्वारा)",
         "packer": r"(?:packed?\s*(?:by|for)?|pkd\.?\s*by|packer|पैक\s*किया\s*गया|पैकर)",
@@ -106,7 +111,10 @@ class ExtractionService:
         for line in lines:
             match = re.search(rf"(?i)(?:net\s*(?:quantity|qty|weight)|contents|शुद्ध\s*मात्रा)\s*[:\-]?\s*{self._quantity}", line)
             if match:
-                candidates.append((f"{match.group(1).replace(',', '.')} {match.group(2).lower().replace('l', 'L') if match.group(2).lower() == 'l' else match.group(2).lower()}", line, 0.96))
+                normalized = ComplianceEngine.normalize_quantity(f"{match.group(1)} {match.group(2)}")
+                if normalized:
+                    logger.debug("Extraction field=net_quantity raw_ocr=%r parsed=%r normalized=%r", line, f"{match.group(1)} {match.group(2)}", normalized)
+                    candidates.append((normalized, line, 0.96))
         return candidates
 
     def _dates(self, lines: list[str]) -> dict[str, ExtractedValue]:

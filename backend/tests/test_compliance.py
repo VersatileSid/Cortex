@@ -10,6 +10,7 @@ from backend.app.core.database import get_db
 from backend.app.main import app
 from backend.app.models import Base, ComplianceResult, ExtractedField, OcrResult
 from backend.app.services.compliance.rule_engine import ComplianceEngine, FieldEvidence
+import pytest
 
 
 def evidence(**values: FieldEvidence) -> dict[str, FieldEvidence]:
@@ -25,6 +26,25 @@ def test_valid_label_rules_pass() -> None:
         consumer_care_email=FieldEvidence("care@example.com", .96),
     ))
     assert {finding.status for finding in findings} == {"PASS"}
+
+
+@pytest.mark.parametrize(("raw", "normalized"), [
+    ("500 g", "500 g"), ("500g", "500 g"), ("0.5 kg", "500 g"),
+    ("  500   G  ", "500 g"), ("500 GMS", "500 g"), ("500 mL", "500 ml"),
+    ("0.5 L", "500 ml"), ("5OO g", "500 g"), ("500 grams", "500 g"),
+    ("500\u00a0g", "500 g"), ("500 m l", "500 ml"), ("500 millilitres", "500 ml"),
+])
+def test_quantity_formatting_variants_are_semantically_valid(raw: str, normalized: str) -> None:
+    engine = ComplianceEngine()
+    finding = next(item for item in engine.evaluate(evidence(net_quantity=FieldEvidence(raw, .96))) if item.rule_id == "NET_QUANTITY_FORMAT")
+    assert engine.normalize_quantity(raw) == normalized
+    assert finding.status == "PASS"
+
+
+@pytest.mark.parametrize("raw", ["", "0 g", "five hundred g", "500 boxes", "500 gg"])
+def test_invalid_or_missing_quantities_remain_issues(raw: str) -> None:
+    finding = next(item for item in ComplianceEngine().evaluate(evidence(net_quantity=FieldEvidence(raw, .96))) if item.rule_id == "NET_QUANTITY_FORMAT")
+    assert finding.status in {"FAIL", "REVIEW"}
 
 
 def test_invalid_values_dates_and_uncertainty_are_explainable() -> None:

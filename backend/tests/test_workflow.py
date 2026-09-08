@@ -46,6 +46,9 @@ def test_workflow_is_persisted_idempotent_and_retryable(tmp_path, monkeypatch) -
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "COMPLETED" and payload["ocr"]["raw_text"] and payload["extraction"] and payload["compliance"]
+        assert payload["extraction"]["fields"]["net_quantity"]["value"] == "500 g"
+        quantity = next(finding for finding in payload["compliance"]["findings"] if finding["rule_id"] == "NET_QUANTITY_FORMAT")
+        assert quantity["status"] == "PASS" and quantity["value"] == "500 g"
         assert client.post(f"/api/inspections/{inspection['id']}/process").json() == payload
         with sessions() as session:
             inspection_id = UUID(inspection["id"])

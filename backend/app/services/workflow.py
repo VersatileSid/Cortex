@@ -85,6 +85,7 @@ class InspectionWorkflow:
             self._set_status(inspection, "EXTRACTION_PROCESSING")
             try:
                 values = self.extraction.extract(ocr_result.raw_text)
+                logger.info("Workflow extraction inspection_id=%s ocr_result_id=%s fields=%s", inspection.id, ocr_result.id, {name: {"raw_ocr": value.source_text, "parsed": value.value, "normalized": value.normalized_value} for name, value in values.items() if value.value})
                 for name, value in values.items():
                     self.db.add(ExtractedField(inspection_id=inspection.id, ocr_result_id=ocr_result.id, field_name=name, value=value.value, confidence=value.confidence, review_status="REVIEW" if value.needs_review else "EXTRACTED"))
                 self.db.commit()
@@ -99,6 +100,7 @@ class InspectionWorkflow:
             self._set_status(inspection, "COMPLIANCE_PROCESSING")
             try:
                 fields = {field.field_name: FieldEvidence(field.value, float(field.confidence) if field.confidence is not None else None, field.review_status == "REVIEW", field.value) for field in extracted}
+                logger.info("Workflow compliance input inspection_id=%s ocr_result_id=%s fields=%s", inspection.id, ocr_result.id, {name: {"raw": item.value, "normalized": self.compliance._normalized("NET_QUANTITY_FORMAT" if name == "net_quantity" else "MRP_FORMAT" if name == "mrp" else "", item.value)} for name, item in fields.items()})
                 rules = self._rules(self.db)
                 for finding in self.compliance.evaluate(fields):
                     rule = rules.get(finding.rule_id)

@@ -42,7 +42,7 @@ www.example.com""")
 @pytest.mark.parametrize(("text", "field", "expected"), [
     ("एमआरपी ₹100\nशुद्ध मात्रा: 500 ग्राम", "mrp", "₹100"),
     ("निर्माता: ABC Foods\nनिर्माण तिथि: 08/2026", "manufacturer", "ABC Foods"),
-    ("Net Qty 1kg", "net_quantity", "1 kg"),
+    ("Net Qty 1kg", "net_quantity", "1000 g"),
     ("Contents: 250 ml", "net_quantity", "250 ml"),
     ("M F G: 08/2026\nMRP Rs.l00", "mrp", None),
 ])

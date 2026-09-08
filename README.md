@@ -55,6 +55,12 @@ After OCR, `POST /api/inspections/{inspection_id}/extract` deterministically int
 
 Extraction is inspection assistance only and does not make legal or compliance decisions. Compliance rules are intentionally deferred to Milestone 7.
 
+## Risk-Based Targeting (Milestone 13)
+
+Risk-Based Targeting is a transparent, deterministic prioritisation aid for completed inspections. It is not a machine-learning model and does not create legal rules or enforcement decisions. Officials see a queue based only on persisted compliance findings, missing extraction values that require review, and repeated evidence in their authorised completed-inspection history. Manufacturers cannot access the targeting queue or numerical risk score.
+
+Scores are capped at 100: 0–24 LOW, 25–49 MEDIUM, 50–74 HIGH, and 75–100 CRITICAL. A FAIL contributes 35/25/15/10 points for HIGH/WARNING/INFO/LOW severity; a REVIEW contributes 20/12/6/4. Each absent extracted field contributes 6 points (maximum 18). A repeated non-pass rule adds 12, a repeated missing field adds 8, and three or more distinct non-pass rules add 8. Repeat evidence is calculated only within the authenticated owner's completed inspections. `GET /api/risk-targeting` is official-only, paginated, and intentionally excludes OCR/image blobs.
+
 ## Run locally
 
 Start PostgreSQL with `docker compose up db -d`, then in separate terminals run:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
@@ -134,3 +136,40 @@ class InspectionSummary(BaseModel):
     ocr: OcrProcessed | None = None
     extraction: ExtractionResponse | None = None
     compliance: ComplianceResponse | None = None
+    risk: RiskAssessmentResponse | None = None
+
+
+class RiskReasonResponse(BaseModel):
+    type: str
+    points: int
+    description: str
+    rule_code: str | None = None
+    severity: str | None = None
+    field: str | None = None
+    occurrences: int | None = None
+
+
+class RiskAssessmentResponse(BaseModel):
+    risk_score: int = Field(ge=0, le=100)
+    risk_level: str
+    reasons: list[RiskReasonResponse]
+
+
+class RiskTargetingItem(BaseModel):
+    inspection_id: UUID
+    product_name: str | None = None
+    risk_score: int = Field(ge=0, le=100)
+    risk_level: str
+    compliance_status: str
+    primary_reason: str
+    completed_at: datetime
+    priority: int
+
+
+class RiskTargetingPage(BaseModel):
+    items: list[RiskTargetingItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    summary: dict[str, int]

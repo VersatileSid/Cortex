@@ -28,6 +28,13 @@ describe("inspection workflow UI", () => {
   beforeEach(() => { localStorage.clear(); mockAuthenticatedFetch(); });
   afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
   it("renders English and all language choices", async () => { renderApp(); expect(await screen.findByText(en.dashboard)).toBeTruthy(); expect(screen.getAllByRole("option")).toHaveLength(23); });
+  it("shows the official risk-targeting navigation and loads its empty state", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ username: "official", role: "OFFICIAL" })).mockResolvedValueOnce(response({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0, summary: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 } })); vi.stubGlobal("fetch", fetchMock);
+    renderApp(); fireEvent.click(await screen.findByRole("button", { name: en.riskTargeting })); expect(await screen.findByText(en.riskTargetingNoResults)).toBeTruthy(); expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:8000/api/risk-targeting?page=1&page_size=20", expect.objectContaining({ credentials: "include" }));
+  });
+  it("does not show risk-targeting navigation to manufacturers", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response({ username: "manufacturer", role: "MANUFACTURER" }))); renderApp(); await screen.findByText(en.dashboard); expect(screen.queryByRole("button", { name: en.riskTargeting })).toBeNull();
+  });
   it("persists a language choice", async () => { renderApp(); fireEvent.change(await screen.findByRole("combobox"), { target: { value: "hi" } }); expect(screen.getByText(hi.dashboard)).toBeTruthy(); expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("hi"); });
   it("has complete locale key sets", async () => { for (const language of UI_LANGUAGES) { const locale = await import(`./locales/${language.code}.json`); expect(Object.keys(locale.default).sort()).toEqual(Object.keys(en).sort()); } });
   it("shows the unauthenticated state after a 401 startup check", async () => {

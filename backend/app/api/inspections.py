@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import get_ocr_languages, get_settings
 from backend.app.core.database import get_db
 from backend.app.models import ComplianceResult, ComplianceRule, ExtractedField, Inspection, InspectionImage, OcrResult, Product
-from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, InspectionHistoryItem, InspectionHistoryPage, InspectionSummary, OcrProcessed
+from backend.app.schemas.inspection import ComplianceFindingResponse, ComplianceResponse, ComplianceSummary, ExtractionFieldResponse, ExtractionResponse, ImageUploaded, InspectionCreate, InspectionCreated, InspectionHistoryItem, InspectionHistoryPage, InspectionSummary, OcrProcessed, RiskAssessmentResponse, RiskReasonResponse
 from backend.app.services.compliance import ComplianceEngine
 from backend.app.services.compliance.rule_engine import FieldEvidence, RULES
 from backend.app.services.extraction import ExtractionService
@@ -21,6 +21,7 @@ from backend.app.services.workflow import InspectionWorkflow, WorkflowError
 from backend.app.services.report import InspectionReportService
 from backend.app.api.auth import get_current_user
 from backend.app.models import User
+from backend.app.services.risk import RiskService
 
 router = APIRouter(prefix="/inspections", tags=["inspections"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger("uvicorn.error")
@@ -185,7 +186,13 @@ def process_inspection(inspection_id: UUID, workflow: InspectionWorkflow = Depen
 @router.get("/{inspection_id}", response_model=InspectionSummary)
 def get_inspection_summary(inspection_id: UUID, workflow: InspectionWorkflow = Depends(get_workflow), user: User = Depends(get_current_user)) -> InspectionSummary:
     try:
-        require_owner(workflow.db.get(Inspection, inspection_id), user); return workflow.summary(inspection_id)
+        inspection = require_owner(workflow.db.get(Inspection, inspection_id), user)
+        summary = workflow.summary(inspection_id)
+        # Numerical targeting evidence is an official view; manufacturers retain their existing detail surface.
+        if user.role == "OFFICIAL" and inspection.status == "COMPLETED":
+            assessment = RiskService(workflow.db, get_settings().pattern_min_occurrences).for_inspection(inspection)
+            summary.risk = RiskAssessmentResponse(risk_score=assessment.risk_score, risk_level=assessment.risk_level, reasons=[RiskReasonResponse(**reason.__dict__) for reason in assessment.reasons])
+        return summary
     except KeyError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
@@ -264,6 +271,9 @@ def extract_inspection_information(
     fields = extraction_service.extract(ocr_result.raw_text)
     # Re-running extraction replaces only this interpretation layer, never OCR evidence.
     db.execute(delete(ExtractedField).where(ExtractedField.ocr_result_id == ocr_result.id))
+    # Findings are derived from extraction. Keeping them after a new parse made
+    # reports show an old FAIL/REVIEW beside a corrected extracted value.
+    invalidated = db.execute(delete(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id)).rowcount
     for field_name, field in fields.items():
         db.add(ExtractedField(
             inspection_id=inspection.id,
@@ -274,6 +284,7 @@ def extract_inspection_information(
             review_status="REVIEW" if field.needs_review else "EXTRACTED",
         ))
     db.commit()
+    logger.info("Extraction persisted inspection_id=%s ocr_result_id=%s fields=%s invalidated_compliance_results=%s", inspection.id, ocr_result.id, {name: {"raw_ocr": field.source_text, "parsed": field.value, "normalized": field.normalized_value} for name, field in fields.items() if field.value}, invalidated)
     return ExtractionResponse(
         inspection_id=inspection.id,
         ocr_result_id=ocr_result.id,
@@ -291,6 +302,7 @@ def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db)
     if not extracted:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Information extraction must be run before compliance analysis.")
     fields = {field.field_name: FieldEvidence(value=field.value, confidence=float(field.confidence) if field.confidence is not None else None, needs_review=field.review_status == "REVIEW", evidence=field.value) for field in extracted}
+    logger.info("Compliance input inspection_id=%s ocr_result_id=%s fields=%s", inspection.id, ocr_result.id, {name: {"raw": item.value, "normalized": compliance_engine._normalized("NET_QUANTITY_FORMAT" if name == "net_quantity" else "MRP_FORMAT" if name == "mrp" else "", item.value)} for name, item in fields.items()})
     rules = _ensure_compliance_rules(db)
     existing = {result.rule_id: result for result in db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id)).all()}
     for finding in compliance_engine.evaluate(fields):
@@ -305,7 +317,9 @@ def run_inspection_compliance(inspection_id: UUID, db: Session = Depends(get_db)
         result.value, result.confidence, result.evidence = finding.value, finding.confidence, finding.evidence
     db.commit()
     persisted = db.scalars(select(ComplianceResult).where(ComplianceResult.inspection_id == inspection.id).join(ComplianceRule).order_by(ComplianceRule.rule_code)).all()
-    return _compliance_response(inspection.id, persisted)
+    response = _compliance_response(inspection.id, persisted)
+    logger.info("Compliance persisted inspection_id=%s overall=%s findings=%s", inspection.id, response.overall_status, {finding.rule_id: {"status": finding.status, "reason": finding.message} for finding in response.findings})
+    return response
 
 
 @router.get("/{inspection_id}/compliance", response_model=ComplianceResponse)

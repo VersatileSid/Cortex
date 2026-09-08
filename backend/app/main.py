@@ -6,6 +6,7 @@ from backend.app.api.inspections import router as inspections_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.patterns import router as patterns_router
 from backend.app.api.roles import router as roles_router
+from backend.app.api.risk_targeting import router as risk_targeting_router
 from backend.app.core.config import get_settings
 
 settings = get_settings()
@@ -29,3 +30,4 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(inspections_router, prefix="/api")
 app.include_router(patterns_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")
+app.include_router(risk_targeting_router, prefix="/api")
